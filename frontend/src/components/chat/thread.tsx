@@ -1,0 +1,1110 @@
+"use client";
+
+import { useCallback, useRef, useState, useEffect, type FormEvent, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import remarkGfm from "remark-gfm";
+import {
+  SendHorizontal,
+  Square,
+  X,
+  Bot,
+  Brain,
+  ChevronDown,
+  Copy,
+  Check,
+  ThumbsUp,
+  ThumbsDown,
+  FileOutput,
+  Loader2,
+  Zap,
+} from "lucide-react";
+import { useStreamContext, useResume } from "./assistant";
+import { ClarifyForm } from "./clarify-form";
+
+// ============================================================
+// Helpers
+// ============================================================
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(
+        (part): part is { type: "text"; text: string } =>
+          typeof part === "object" &&
+          part !== null &&
+          part.type === "text" &&
+          typeof part.text === "string",
+      )
+      .map((part) => part.text)
+      .join("");
+  }
+  return "";
+}
+
+interface ExtractedToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+
+function getToolCallId(value: unknown): string {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function toolCallFingerprint(toolCall: ExtractedToolCall): string {
+  return `${toolCall.name}:${stableStringify(toolCall.args)}`;
+}
+
+function extractToolCalls(message: any): ExtractedToolCall[] {
+  // Prefer dedicated tool_calls property
+  if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+    return message.tool_calls
+      .filter((toolCall: any) => typeof toolCall?.name === "string")
+      .map((toolCall: any) => ({
+        id: getToolCallId(toolCall.id),
+        name: toolCall.name,
+        args: toolCall.args ?? {},
+      }));
+  }
+  // Fallback: extract from content array (useStream puts them here)
+  if (Array.isArray(message.content)) {
+    return message.content
+      .filter(
+        (part: any) =>
+          typeof part === "object" &&
+          part !== null &&
+          (part.type === "tool_call" || part.type === "tool_use") &&
+          typeof part.name === "string",
+      )
+      .map((part: any) => ({
+        // Historical content tool_call parts may have id: ""; do not invent
+        // a real-looking id because tool messages match by tool_call_id.
+        id: getToolCallId(part.id),
+        name: part.name,
+        args: part.args ?? {},
+      }));
+  }
+  return [];
+}
+
+/**
+ * Check if the last AI message is currently streaming text content,
+ * so we can hide the typing indicator when real content is flowing.
+ */
+function isStreamingContent(messages: any[]): boolean {
+  if (messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  const type = last._getType?.() || last.type;
+  if (type === "ai") {
+    const text = extractTextContent(last.content);
+    const toolCalls = extractToolCalls(last);
+    return text.length > 0 || toolCalls.length > 0;
+  }
+  // tool message means we're mid-turn, AI will continue
+  if (type === "tool") return true;
+  return false;
+}
+
+// ============================================================
+// Thread (root)
+// ============================================================
+
+export function Thread() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { messages, isLoading, pendingMessage, error } = useStreamContext();
+  const hasMessages = messages.length > 0 || !!pendingMessage;
+
+  // Auto-scroll on new content
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages.length, isLoading, pendingMessage]);
+
+  return (
+    <div className="flex h-full flex-col">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
+          {!hasMessages && <EmptyState />}
+          <MessageList messages={messages} />
+          {pendingMessage && <HumanBubble text={pendingMessage} pending />}
+          <InterruptBlock />
+          {isLoading && !isStreamingContent(messages) && <TypingIndicator />}
+          {error && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              出错了：{error.message}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="border-t border-border px-4 py-3">
+        <div className="mx-auto max-w-2xl">
+          <ChatInput />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Message list
+// ============================================================
+
+/**
+ * A "turn" groups all consecutive AI + tool messages between two human messages
+ * into a single visual bubble, so tool calls and final text appear together.
+ */
+interface AITurn {
+  id: string;
+  aiMessages: any[];
+  toolMessages: any[];
+}
+
+function groupMessagesIntoTurns(messages: any[]) {
+  const turns: Array<{ type: "human"; text: string; id: string } | { type: "ai-turn"; turn: AITurn }> = [];
+  let currentTurn: AITurn | null = null;
+
+  for (const msg of messages) {
+    const msgType = msg._getType?.() || msg.type;
+
+    if (msgType === "human") {
+      if (currentTurn) {
+        turns.push({ type: "ai-turn", turn: currentTurn });
+        currentTurn = null;
+      }
+      turns.push({
+        type: "human",
+        text: typeof msg.content === "string" ? msg.content : "",
+        id: msg.id ?? `human-${turns.length}`,
+      });
+    } else if (msgType === "ai") {
+      if (!currentTurn) {
+        currentTurn = { id: msg.id ?? `turn-${turns.length}`, aiMessages: [], toolMessages: [] };
+      }
+      currentTurn.aiMessages.push(msg);
+    } else if (msgType === "tool") {
+      if (!currentTurn) {
+        currentTurn = { id: `turn-${turns.length}`, aiMessages: [], toolMessages: [] };
+      }
+      currentTurn.toolMessages.push(msg);
+    }
+  }
+
+  if (currentTurn) {
+    turns.push({ type: "ai-turn", turn: currentTurn });
+  }
+
+  return turns;
+}
+
+function MessageList({ messages }: { messages: any[] }) {
+  const turns = groupMessagesIntoTurns(messages);
+
+  return (
+    <>
+      {turns.map((entry) => {
+        if (entry.type === "human") {
+          return <HumanBubble key={entry.id} text={entry.text} />;
+        }
+        return <AITurnBubble key={entry.turn.id} turn={entry.turn} />;
+      })}
+    </>
+  );
+}
+
+// ============================================================
+// AI turn bubble (merges consecutive AI+tool messages into one bubble)
+// ============================================================
+
+function AITurnBubble({ turn }: { turn: AITurn }) {
+  // Exclude clarify_form tool messages — form UI is handled by InterruptBlock.
+  const effectiveToolMessages = turn.toolMessages.filter(
+    (msg) => msg.name !== "clarify_form",
+  );
+
+  // Collect all tool calls and text from all AI messages in this turn
+  const allToolCallsRaw: ExtractedToolCall[] = [];
+  const allTextParts: string[] = [];
+  const allReasoning: string[] = [];
+
+  for (const aiMsg of turn.aiMessages) {
+    const toolCalls = extractToolCalls(aiMsg);
+    allToolCallsRaw.push(...toolCalls);
+
+    const text = extractTextContent(aiMsg.content);
+    if (text.trim()) allTextParts.push(text);
+
+    const reasoning = aiMsg.additional_kwargs?.reasoning_content;
+    if (reasoning) allReasoning.push(reasoning);
+  }
+
+  // Deduplicate tool calls. Refreshed history can contain the same tool call
+  // twice: once in top-level tool_calls with a real id and once in content
+  // with id: "". Keep the real-id call so tool_call_id result matching works.
+  const realIdFingerprints = new Set(
+    allToolCallsRaw
+      .filter((tc) => tc.id)
+      .map((tc) => toolCallFingerprint(tc)),
+  );
+  const seenIds = new Set<string>();
+  const seenFallbackFingerprints = new Set<string>();
+  const allToolCalls = allToolCallsRaw.filter((tc) => {
+    const fingerprint = toolCallFingerprint(tc);
+    if (tc.id) {
+      if (seenIds.has(tc.id)) return false;
+      seenIds.add(tc.id);
+      return true;
+    }
+    if (realIdFingerprints.has(fingerprint)) return false;
+    if (seenFallbackFingerprints.has(fingerprint)) return false;
+    seenFallbackFingerprints.add(fingerprint);
+    return true;
+  });
+
+  // Filter out clarify_form tool calls (rendered by InterruptBlock)
+  const visibleToolCalls = allToolCalls.filter((tc) => tc.name !== "clarify_form");
+
+  // Match tool results to tool calls.
+  // Strategy: try by tool_call_id first; if all IDs are empty, fall back
+  // to positional matching (tool calls and tool messages in order).
+  const toolResultMap = new Map<string, any>();
+  const hasRealIds = visibleToolCalls.some((tc) => tc.id && tc.id.length > 0);
+
+  if (hasRealIds) {
+    // ID-based matching
+    for (const toolMsg of effectiveToolMessages) {
+      const callId = toolMsg.tool_call_id;
+      if (callId) toolResultMap.set(callId, toolMsg);
+    }
+  } else {
+    // Positional matching: pair tool calls with tool messages by order
+    for (let i = 0; i < visibleToolCalls.length; i++) {
+      if (i < effectiveToolMessages.length) {
+        toolResultMap.set(visibleToolCalls[i].id || `pos-${i}`, effectiveToolMessages[i]);
+      }
+    }
+    // Assign positional keys to tool calls that lack real ids
+    visibleToolCalls.forEach((tc, i) => {
+      if (!tc.id) tc.id = `pos-${i}`;
+    });
+  }
+
+  const combinedText = allTextParts.join("\n\n");
+  const combinedReasoning = allReasoning.join("\n\n");
+
+  if (!combinedText && visibleToolCalls.length === 0 && !combinedReasoning) return null;
+
+  return (
+    <div className="group">
+      <div className="min-w-0 space-y-2">
+        {combinedReasoning && <ReasoningBlock text={combinedReasoning} />}
+
+        {visibleToolCalls.map((tc, idx) => (
+          <ToolCallCard
+            key={tc.id || `tc-${idx}`}
+            toolCall={tc}
+            result={toolResultMap.get(tc.id || `pos-${idx}`)}
+          />
+        ))}
+
+        {combinedText && (
+          <div className="prose prose-invert prose-sm max-w-none">
+            <MarkdownWithCitations text={combinedText} />
+          </div>
+        )}
+
+        {combinedText && <MessageActions content={combinedText} />}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Tool call cards
+// ============================================================
+
+// Tool name -> Chinese label mapping
+const TOOL_LABELS: Record<string, string> = {
+  terminal: "命令执行",
+  rag_search: "知识库检索",
+  load_skill: "加载技能",
+  save_output: "保存产出",
+  clarify_form: "信息收集",
+};
+
+function getToolLabel(name: string): string {
+  return TOOL_LABELS[name] || name;
+}
+
+interface ToolDisplayContext {
+  toolCall: ExtractedToolCall;
+  result: any;
+  isDone: boolean;
+}
+
+interface ToolDisplayConfig {
+  label: (ctx: ToolDisplayContext) => string;
+  expandable: boolean | ((ctx: ToolDisplayContext) => boolean);
+  summary?: (ctx: ToolDisplayContext) => ReactNode;
+  details?: (ctx: ToolDisplayContext) => ReactNode;
+}
+
+function truncateText(text: string, max = 90): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max - 1)}…`;
+}
+
+function getToolArgString(args: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+  }
+  return "";
+}
+
+function extractToolResultText(result: unknown): string {
+  if (!result) return "";
+  if (typeof result === "string") return result;
+  if (typeof result === "object" && result !== null) {
+    const content = (result as { content?: unknown }).content;
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === "string") return part;
+          if (
+            typeof part === "object" &&
+            part !== null &&
+            "text" in part &&
+            typeof (part as { text?: unknown }).text === "string"
+          ) {
+            return (part as { text: string }).text;
+          }
+          return "";
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
+  }
+  return "";
+}
+
+function ToolTextBlock({ value }: { value: string }) {
+  return (
+    <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border border-border/50 bg-background/70 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+      {value || "无返回内容"}
+    </pre>
+  );
+}
+
+const DEFAULT_TOOL_DISPLAY: ToolDisplayConfig = {
+  label: ({ toolCall }) => getToolLabel(toolCall.name),
+  expandable: false,
+};
+
+const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
+  rag_search: {
+    label: () => "知识库检索",
+    expandable: true,
+    summary: ({ toolCall }) => {
+      const query = getToolArgString(toolCall.args, ["query"]);
+      return query ? `查询：${truncateText(query)}` : "查询知识库";
+    },
+    details: ({ result }) => <ToolTextBlock value={extractToolResultText(result)} />,
+  },
+  terminal: {
+    label: () => "命令执行",
+    expandable: false,
+    summary: () => "执行详情已隐藏",
+  },
+  load_skill: {
+    label: ({ toolCall }) => {
+      const skillName = getToolArgString(toolCall.args, ["skill_name", "name"]);
+      return skillName ? `加载技能：${skillName}` : "加载技能";
+    },
+    expandable: true,
+    details: ({ result }) => <ToolTextBlock value={extractToolResultText(result)} />,
+  },
+  clarify_form: {
+    label: () => "信息收集",
+    expandable: false,
+  },
+};
+
+function ToolCallCard({
+  toolCall,
+  result,
+}: {
+  toolCall: ExtractedToolCall;
+  result: any;
+}) {
+  const name = toolCall.name;
+  const isDone = !!result;
+  const [expanded, setExpanded] = useState(false);
+
+  // clarify_form 的真正 UI 由 interrupt 渲染，这里不显示
+  if (name === "clarify_form") return null;
+
+  const context: ToolDisplayContext = { toolCall, result, isDone };
+  const config = TOOL_DISPLAY_CONFIG[name] ?? DEFAULT_TOOL_DISPLAY;
+  const expandable =
+    typeof config.expandable === "function"
+      ? config.expandable(context)
+      : config.expandable;
+  const label = config.label(context);
+  const summary = config.summary?.(context);
+  const details = config.details?.(context);
+  const canExpand = isDone && expandable && !!details;
+
+  if (!isDone) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground not-prose">
+        <Loader2 size={13} className="animate-spin" />
+        <span className="font-medium">{label}...</span>
+        {summary && <span className="min-w-0 truncate text-muted-foreground/80">{summary}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground not-prose">
+      <button
+        type="button"
+        onClick={() => {
+          if (canExpand) setExpanded((value) => !value);
+        }}
+        disabled={!canExpand}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
+          canExpand ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
+        }`}
+      >
+        <span className="text-green-400">✓</span>
+        <span className="shrink-0 font-medium">{label}</span>
+        {summary && (
+          <span className="min-w-0 flex-1 truncate text-muted-foreground/80">
+            {summary}
+          </span>
+        )}
+        {canExpand && (
+          <ChevronDown
+            size={13}
+            className={`ml-auto shrink-0 transition-transform ${
+              expanded ? "rotate-180" : ""
+            }`}
+          />
+        )}
+      </button>
+      {canExpand && expanded && (
+        <div className="border-t border-border/40 px-3 py-2">{details}</div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Interrupt block
+// ============================================================
+
+function InterruptBlock() {
+  const { interrupt } = useStreamContext();
+  const onResume = useResume();
+
+  if (!interrupt || interrupt.value === undefined) return null;
+
+  const interruptValue = interrupt.value as Record<string, unknown>;
+
+  if (interruptValue.fields && Array.isArray(interruptValue.fields)) {
+    const fields = (
+      interruptValue.fields as Array<Record<string, unknown>>
+    ).map((field) => ({
+      name: (field.name as string) || "",
+      label: (field.label as string) || "",
+      type: (field.type as "text" | "select" | "multiselect") || "text",
+      options: field.options as string[] | undefined,
+      required: field.required !== false,
+    }));
+
+    return (
+      <div>
+        <div className="min-w-0">
+          <ClarifyForm
+            title={(interruptValue.title as string) || "请填写信息"}
+            description={(interruptValue.description as string) || ""}
+            fields={fields}
+            onSubmit={onResume}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ============================================================
+// Bubbles & indicators
+// ============================================================
+
+function HumanBubble({
+  text,
+  pending,
+}: {
+  text: string;
+  pending?: boolean;
+}) {
+  // Parse "/command rest" pattern to render pill + text
+  const slashMatch = text.match(/^(\/\w+)\s([\s\S]*)$/);
+  const command = slashMatch
+    ? SLASH_COMMANDS.find((c) => c.command === slashMatch[1])
+    : null;
+  const displayText = command ? slashMatch![2] : text;
+
+  return (
+    <div className="flex justify-end">
+      <div
+        className={`max-w-[80%] rounded-2xl rounded-br-md bg-accent/20 px-4 py-2.5 text-sm text-foreground ${
+          pending ? "opacity-70" : ""
+        }`}
+      >
+        {command && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-xs text-accent mr-2 align-middle">
+            {command.icon}
+            <span className="font-medium">{command.label}</span>
+          </span>
+        )}
+        <span className="whitespace-pre-wrap">{displayText}</span>
+      </div>
+    </div>
+  );
+}
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-1.5">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce"
+          style={{ animationDelay: `${i * 150}ms` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="flex flex-col items-center gap-3 py-20 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent">
+        <Bot size={24} />
+      </div>
+      <h3 className="text-base font-medium text-foreground">培训助手</h3>
+      <p className="max-w-sm text-sm text-muted-foreground">
+        上传培训文档后，我可以帮你理解内容、回答问题，还能用
+        <code className="mx-1 rounded bg-muted px-1.5 py-0.5 text-xs text-accent">
+          /ppt
+        </code>
+        生成培训PPT
+      </p>
+    </div>
+  );
+}
+
+// ============================================================
+// Slash commands
+// ============================================================
+
+interface SlashCommand {
+  command: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+const SLASH_COMMANDS: SlashCommand[] = [
+  {
+    command: "/ppt",
+    label: "生成培训PPT",
+    description: "基于知识库文档生成 HTML 演示文稿",
+    icon: <FileOutput size={14} />,
+  },
+];
+
+function SlashCommandMenu({
+  filter,
+  selectedIndex,
+  onSelect,
+}: {
+  filter: string;
+  selectedIndex: number;
+  onSelect: (cmd: SlashCommand) => void;
+}) {
+  const filtered = SLASH_COMMANDS.filter(
+    (cmd) =>
+      cmd.command.includes(filter.toLowerCase()) ||
+      cmd.label.includes(filter),
+  );
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-border bg-[#1e1e2e] shadow-xl overflow-hidden z-50">
+      <div className="px-3 py-1.5 text-[11px] text-muted-foreground/60 uppercase tracking-wider border-b border-border/50">
+        可用命令
+      </div>
+      {filtered.map((cmd, index) => (
+        <button
+          key={cmd.command}
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onSelect(cmd);
+          }}
+          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+            index === selectedIndex
+              ? "bg-accent/15 text-foreground"
+              : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+          }`}
+        >
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+            {cmd.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-accent">
+                {cmd.command}
+              </span>
+              <span className="text-sm">{cmd.label}</span>
+            </div>
+            <p className="text-xs text-muted-foreground/70 truncate">
+              {cmd.description}
+            </p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// Chat input
+// ============================================================
+
+function ChatInput() {
+  const [text, setText] = useState("");
+  const [activeCommand, setActiveCommand] = useState<SlashCommand | null>(null);
+  const [showCommands, setShowCommands] = useState(false);
+  const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+  const { submit, stop, isLoading } = useStreamContext();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const slashFilter = text.startsWith("/") ? text : "";
+  const filteredCommands = SLASH_COMMANDS.filter(
+    (cmd) =>
+      cmd.command.includes(slashFilter.toLowerCase()) ||
+      cmd.label.includes(slashFilter),
+  );
+  const isMenuVisible = showCommands && !activeCommand && filteredCommands.length > 0;
+
+  const selectCommand = useCallback((cmd: SlashCommand) => {
+    setActiveCommand(cmd);
+    setText("");
+    setShowCommands(false);
+    setSelectedCmdIndex(0);
+    inputRef.current?.focus();
+  }, []);
+
+  const clearCommand = useCallback(() => {
+    setActiveCommand(null);
+  }, []);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setText(value);
+    if (!activeCommand && value.startsWith("/")) {
+      setShowCommands(true);
+      setSelectedCmdIndex(0);
+    } else {
+      setShowCommands(false);
+    }
+  }, [activeCommand]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      // Backspace on empty input clears the active pill
+      if (e.key === "Backspace" && text === "" && activeCommand) {
+        e.preventDefault();
+        clearCommand();
+        return;
+      }
+      if (!isMenuVisible) return;
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedCmdIndex((prev) =>
+          prev <= 0 ? filteredCommands.length - 1 : prev - 1,
+        );
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedCmdIndex((prev) =>
+          prev >= filteredCommands.length - 1 ? 0 : prev + 1,
+        );
+      } else if (e.key === "Tab" || e.key === "Enter") {
+        e.preventDefault();
+        const cmd = filteredCommands[selectedCmdIndex];
+        if (cmd) selectCommand(cmd);
+      } else if (e.key === "Escape") {
+        setShowCommands(false);
+      }
+    },
+    [isMenuVisible, filteredCommands, selectedCmdIndex, selectCommand, text, activeCommand, clearCommand],
+  );
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (isMenuVisible) return;
+    const trimmed = text.trim();
+    if (!trimmed || isLoading) return;
+    // Encode slash command into content: "/command userInput"
+    const content = activeCommand
+      ? `${activeCommand.command} ${trimmed}`
+      : trimmed;
+    submit(content);
+    setText("");
+    setActiveCommand(null);
+    setShowCommands(false);
+  };
+
+  const skipNextBlurRef = useRef(false);
+
+  const openSkillMenu = useCallback(() => {
+    if (activeCommand) {
+      clearCommand();
+      return;
+    }
+    skipNextBlurRef.current = true;
+    setText("/");
+    setShowCommands(true);
+    setSelectedCmdIndex(0);
+    inputRef.current?.focus();
+  }, [activeCommand, clearCommand]);
+
+  return (
+    <div className="relative">
+      {isMenuVisible && (
+        <SlashCommandMenu
+          filter={slashFilter}
+          selectedIndex={selectedCmdIndex}
+          onSelect={selectCommand}
+        />
+      )}
+      <form
+        onSubmit={handleSubmit}
+        className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-3 py-2 focus-within:border-accent/40"
+      >
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); openSkillMenu(); }}
+          title="技能"
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+            activeCommand
+              ? "bg-accent/20 text-accent"
+              : "text-muted-foreground hover:bg-muted/50 hover:text-accent"
+          }`}
+        >
+          <Zap size={16} />
+        </button>
+
+        {/* Pill token for active command */}
+        {activeCommand && (
+          <span className="flex items-center gap-1.5 rounded-full bg-accent/15 border border-accent/30 px-2.5 py-1 text-xs text-accent shrink-0 animate-in fade-in slide-in-from-left-2 duration-150">
+            {activeCommand.icon}
+            <span className="font-medium">{activeCommand.label}</span>
+          </span>
+        )}
+
+        <input
+          ref={inputRef}
+          type="text"
+          value={text}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            if (skipNextBlurRef.current) {
+              skipNextBlurRef.current = false;
+              return;
+            }
+            setTimeout(() => setShowCommands(false), 150);
+          }}
+          placeholder={activeCommand ? "输入具体要求..." : "输入消息... 输入 / 查看可用命令"}
+          disabled={isLoading}
+          className="min-h-[36px] flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+          autoFocus
+        />
+        {isLoading ? (
+          <button
+            type="button"
+            onClick={() => stop()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/20 text-destructive transition-colors hover:bg-destructive/30"
+          >
+            <Square size={14} />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!text.trim()}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-30"
+          >
+            <SendHorizontal size={14} />
+          </button>
+        )}
+      </form>
+    </div>
+  );
+}
+
+// ============================================================
+// Markdown with citations
+// ============================================================
+
+const REF_PATTERN = /\{\{ref:([^|]+)\|([^}]+)\}\}/g;
+const CITE_HREF_PREFIX = "#__cite__";
+
+interface CitationEntry {
+  docName: string;
+  detail: string;
+}
+
+function MarkdownWithCitations({ text }: { text: string }) {
+  const citations: CitationEntry[] = [];
+  const sanitized = text.replace(
+    REF_PATTERN,
+    (_m, docName: string, detail: string) => {
+      citations.push({ docName, detail });
+      return `[⟦${citations.length}⟧](${CITE_HREF_PREFIX}${citations.length})`;
+    },
+  );
+
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        a: ({ href, children, ...rest }) => {
+          if (href?.startsWith(CITE_HREF_PREFIX)) {
+            const idx = parseInt(href.slice(CITE_HREF_PREFIX.length), 10);
+            const entry = citations[idx - 1];
+            if (entry)
+              return (
+                <CitationBadge
+                  index={idx}
+                  docName={entry.docName}
+                  detail={entry.detail}
+                />
+              );
+          }
+          return (
+            <a href={href} {...rest}>
+              {children}
+            </a>
+          );
+        },
+        table: ({ children, ...rest }) => (
+          <div className="overflow-x-auto">
+            <table className="w-max min-w-full" {...rest}>
+              {children}
+            </table>
+          </div>
+        ),
+        code: ({ className, children, ...rest }) => {
+          const match = /language-(\w+)/.exec(className || "");
+          const codeString = String(children).replace(/\n$/, "");
+          if (match) {
+            return (
+              <SyntaxHighlighter
+                style={oneDark}
+                language={match[1]}
+                PreTag="div"
+                customStyle={{
+                  margin: 0,
+                  borderRadius: "0.5rem",
+                  fontSize: "0.85em",
+                }}
+              >
+                {codeString}
+              </SyntaxHighlighter>
+            );
+          }
+          return (
+            <code className={className} {...rest}>
+              {children}
+            </code>
+          );
+        },
+      }}
+    >
+      {sanitized}
+    </ReactMarkdown>
+  );
+}
+
+function CitationBadge({
+  index,
+  docName,
+  detail,
+}: {
+  index: number;
+  docName: string;
+  detail: string;
+}) {
+  const [show, setShow] = useState(false);
+  const badgeRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  const onEnter = useCallback(() => {
+    if (badgeRef.current) {
+      const r = badgeRef.current.getBoundingClientRect();
+      setPos({ top: r.top - 8, left: r.left + r.width / 2 });
+    }
+    setShow(true);
+  }, []);
+
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={onEnter}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span
+        ref={badgeRef}
+        className="ml-0.5 inline-flex h-[18px] min-w-[18px] cursor-default items-center justify-center rounded-full bg-emerald-500/20 px-1 text-[10px] font-semibold text-emerald-400 align-super leading-none"
+      >
+        {index}
+      </span>
+      {show && (
+        <span
+          className="fixed z-[9999] w-max max-w-xs -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-[#1e1e2e] px-3 py-2 text-xs text-foreground shadow-xl"
+          style={{ top: pos.top, left: pos.left }}
+        >
+          <span className="font-medium text-emerald-400">📄 {docName}</span>
+          <br />
+          <span className="text-muted-foreground">{detail}</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ============================================================
+// Reasoning block
+// ============================================================
+
+function ReasoningBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!text?.trim()) return null;
+  const preview =
+    text.length > 120 ? text.slice(0, 120) + "..." : text;
+
+  return (
+    <div className="rounded-lg border border-accent/20 bg-accent/5 not-prose">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-accent/80 hover:text-accent"
+      >
+        <Brain size={13} />
+        <span>思考过程 ({text.length} 字符)</span>
+        <ChevronDown
+          size={13}
+          className={`ml-auto transition-transform ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+      {expanded ? (
+        <pre className="border-t border-accent/10 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap max-h-60 overflow-y-auto">
+          {text}
+        </pre>
+      ) : (
+        <p className="px-3 pb-2 text-[11px] text-muted-foreground/70 italic">
+          {preview}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Message actions
+// ============================================================
+
+function MessageActions({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<"like" | "dislike" | null>(null);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard may fail */
+    }
+  }, [content]);
+
+  return (
+    <div className="mt-1.5 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <button
+        onClick={handleCopy}
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        title="复制消息"
+      >
+        {copied ? (
+          <Check size={14} className="text-green-400" />
+        ) : (
+          <Copy size={14} />
+        )}
+      </button>
+      <button
+        onClick={() =>
+          setFeedback(feedback === "like" ? null : "like")
+        }
+        className={`rounded-md p-1 transition-colors ${
+          feedback === "like"
+            ? "text-green-400"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        }`}
+        title="有帮助"
+      >
+        <ThumbsUp size={14} />
+      </button>
+      <button
+        onClick={() =>
+          setFeedback(feedback === "dislike" ? null : "dislike")
+        }
+        className={`rounded-md p-1 transition-colors ${
+          feedback === "dislike"
+            ? "text-red-400"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+        }`}
+        title="没有帮助"
+      >
+        <ThumbsDown size={14} />
+      </button>
+    </div>
+  );
+}

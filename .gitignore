@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+backend/.uv-cache/
+
+# Node
+node_modules/
+.next/
+
+# Data (runtime generated)
+backend/data/
+backend/.langgraph_api/
+
+# Logs
+logs/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
