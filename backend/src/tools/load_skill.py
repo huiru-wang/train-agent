@@ -1,4 +1,7 @@
+import json
 import logging
+from pathlib import Path
+from typing import Annotated
 
 from langchain_core.tools import tool
 
@@ -19,81 +22,95 @@ def create_load_skill_tool(skill_manager: SkillManager):
         f"    - {s['name']}: {s['description']}" for s in available
     )
 
-    # Build reference info for skills that have references
-    ref_info_parts = []
-    for skill in available:
-        refs = skill_manager.list_references(skill["name"])
-        if refs:
-            ref_names = ", ".join(refs)
-            ref_info_parts.append(
-                f"    {skill['name']} references: {ref_names}"
-            )
-    ref_info = "\n".join(ref_info_parts)
-
-    dynamic_description = f"""Load a specialized skill prompt, or a specific reference document within a skill.
-
-Available skills:
-{skill_list if skill_list else '    (no skills registered)'}
-
-{('Reference documents (use reference_name to load):\n' + ref_info) if ref_info else ''}
-
-When called without reference_name, returns the skill's main prompt.
-When called with reference_name (e.g. "themes.md"), returns that reference document."""
+    dynamic_description = (
+        "加载技能提示或技能内的文件。\n\n"
+        "可用技能：\n"
+        + (skill_list if skill_list else "    (no skills registered)")
+        + "\n\n"
+        "调用时不带 file_paths，返回技能主提示 + linked_files（仅包含技能目录中真实存在的 references/scripts/assets 等文件）。\n"
+        "调用时带 file_paths（最多5 个），批量加载文件。\n\n"
+        "file_paths 格式：['references/themes.md', 'scripts/save_and_output.py', 'assets/themes/tokyo-night.css']"
+    )
 
     @tool(description=dynamic_description)
-    def load_skill(skill_name: str, reference_name: str = "") -> str:
-        """Load a skill prompt or its reference document.
+    def load_skill(
+        skill_name: str,
+        file_paths: Annotated[
+            list[str],
+            "要加载的文件路径列表，最多5 个，如 [\"references/themes.md\"]"
+        ] = [],
+    ) -> str:
+        """加载技能提示或技能内的文件。
 
         Args:
-            skill_name: Name of the skill to load.
-            reference_name: Optional. Name of a reference file (e.g. "themes.md").
-                          If provided, loads that reference instead of the main skill.
+            skill_name: 技能名称。
+            file_paths: 要加载的文件路径列表，最多5 个。如为空，返回技能主内容。
         """
-        if reference_name:
-            logger.info(
-                "[Tool:load_skill] loading reference: skill=%s, ref=%s",
-                skill_name, reference_name,
-            )
-            # Normalize: accept both "themes.md" and "references/themes.md"
-            ref_path = reference_name
-            if not ref_path.startswith("references/"):
-                ref_path = f"references/{ref_path}"
-            content = skill_manager.load_reference(skill_name, ref_path)
+        # Validate file_paths count
+        if len(file_paths) > 5:
+            return json.dumps({
+                "success": False,
+                "error": "最多只能一次加载 5 个文件",
+            })
+
+        # Get linked_files for this skill
+        linked_files = skill_manager.list_linked_files(skill_name)
+        skill_dir = None
+        skill_meta = skill_manager._skills.get(skill_name)
+        if skill_meta:
+            skill_dir = str(Path(skill_meta.file_path).parent)
+
+        # If no file_paths, return skill content + linked_files
+        if not file_paths:
+            content = skill_manager.load_skill(skill_name)
             if content is None:
-                available_refs = skill_manager.list_references(skill_name)
+                available_names = [s["name"] for s in skill_manager.list_skills()]
                 logger.warning(
-                    "[Tool:load_skill] reference not found: skill=%s, ref=%s, available=%s",
-                    skill_name, reference_name, available_refs,
+                    "[Tool:load_skill] skill not found: %s, available=%s",
+                    skill_name, available_names,
                 )
-                return (
-                    f"Reference '{reference_name}' not found for skill '{skill_name}'. "
-                    f"Available: {', '.join(available_refs) if available_refs else 'none'}"
-                )
+                return json.dumps({
+                    "success": False,
+                    "error": f"Skill '{skill_name}' not found. Available: {', '.join(available_names)}",
+                })
+
+            # Substitute ${SKILL_DIR} with actual skill directory path
+            if skill_dir and "${SKILL_DIR}" in content:
+                content = content.replace("${SKILL_DIR}", skill_dir)
+
             logger.info(
-                "[Tool:load_skill] reference loaded: skill=%s, ref=%s, %d chars",
-                skill_name, reference_name, len(content),
+                "[Tool:load_skill] skill loaded: %s, %d chars, skill_dir=%s",
+                skill_name, len(content), skill_dir,
             )
-            return content
+            return json.dumps({
+                "success": True,
+                "name": skill_name,
+                "content": content,
+                "linked_files": linked_files,
+            })
 
-        logger.info("[Tool:load_skill] loading skill: %s", skill_name)
-        content = skill_manager.load_skill(skill_name)
-        if content is None:
-            available_names = [s["name"] for s in skill_manager.list_skills()]
-            logger.warning(
-                "[Tool:load_skill] skill not found: %s, available=%s",
-                skill_name, available_names,
-            )
-            return f"Skill '{skill_name}' not found. Available: {', '.join(available_names)}"
-
-        # Substitute ${SKILL_DIR} with actual skill directory path
-        from pathlib import Path
-        skill_dir = str(Path(skill_manager._skills[skill_name].file_path).parent)
-        content = content.replace("${SKILL_DIR}", skill_dir)
-
+        # Batch load files
         logger.info(
-            "[Tool:load_skill] skill loaded: %s, %d chars, skill_dir=%s",
-            skill_name, len(content), skill_dir,
+            "[Tool:load_skill] batch loading: skill=%s, files=%s",
+            skill_name, file_paths,
         )
-        return content
+        files_content = skill_manager.load_files(skill_name, file_paths)
+
+        # Check for missing files
+        missing = [p for p, c in files_content.items() if c is None]
+        if missing:
+            logger.warning(
+                "[Tool:load_skill] some files not found: skill=%s, missing=%s",
+                skill_name, missing,
+            )
+
+        result = {
+            "success": True,
+            "name": skill_name,
+            "files": files_content,
+            "missing_files": missing if missing else None,
+            "linked_files": linked_files,
+        }
+        return json.dumps(result)
 
     return load_skill

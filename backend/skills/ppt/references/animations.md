@@ -5,9 +5,9 @@ adding `class="anim-<name>"` OR `data-anim="<name>"` to any element
 (`runtime.js` re-triggers `data-anim` elements whenever a slide becomes
 active, so you get the entry effect every time you navigate onto the slide).
 
-Open `templates/animation-showcase.html` to browse all of them — one slide
-per animation, auto-playing on slide enter. Press **A** on any slide to cycle
-a random animation on the current page.
+This package does not include a local `templates/animation-showcase.html`.
+Treat the catalog below as the source of truth for what you can apply in the
+generated HTML.
 
 ## Directional fades
 
@@ -90,7 +90,8 @@ All animations are disabled automatically when
 - Use at most 1-2 distinct animation types on a single slide. Mixing 5 looks
   messy.
 - Stagger lists + a single hero entry = clean rhythm.
-- For counter-up, pair with `stat-highlight.html` or `kpi-grid.html`.
+- For counter-up, pair it with a KPI-heavy slide pattern such as a stat card,
+  KPI grid, or summary metrics page.
 
 ## FX (canvas)
 

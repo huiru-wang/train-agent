@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import { PanelRightClose, PanelRightOpen } from "lucide-react";
+import React, { useState, useCallback, useRef, type ReactNode } from "react";
 
 interface ThreePanelProps {
   left: React.ReactNode;
   center: React.ReactNode;
   right: React.ReactNode;
+  rightCollapsed?: boolean;
+  onRightToggle?: () => void;
 }
 
 const MIN_SIDE_WIDTH = 240;
@@ -14,10 +15,9 @@ const MAX_SIDE_WIDTH = 400;
 const DEFAULT_LEFT_WIDTH = 280;
 const DEFAULT_RIGHT_WIDTH = 300;
 
-export function ThreePanel({ left, center, right }: ThreePanelProps) {
+export function ThreePanel({ left, center, right, rightCollapsed = false, onRightToggle }: ThreePanelProps) {
   const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
   const [rightWidth, setRightWidth] = useState(DEFAULT_RIGHT_WIDTH);
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleMouseDown = useCallback(
@@ -59,11 +59,24 @@ export function ThreePanel({ left, center, right }: ThreePanelProps) {
     [leftWidth, rightWidth]
   );
 
+  // Helper to wrap right panel with collapse callback
+  const renderRight = (): ReactNode => {
+    if (rightCollapsed) return null;
+    // Clone and inject props into right panel if it's a function component
+    if (typeof right === "object" && right !== null && "type" in (right as object)) {
+      const element = right as React.ReactElement<{ collapsed?: boolean; onToggle?: () => void }>;
+      if (element.type === "function") {
+        return React.cloneElement(element, { collapsed: rightCollapsed, onToggle: onRightToggle });
+      }
+    }
+    return right;
+  };
+
   return (
     <div ref={containerRef} className="flex h-full w-full overflow-hidden">
       {/* Left Panel */}
-      <div
-        className="flex-shrink-0 overflow-y-auto border-r border-border"
+       <div
+        className="shrink-0 overflow-y-auto border-r border-border"
         style={{ width: leftWidth }}
       >
         {left}
@@ -71,7 +84,7 @@ export function ThreePanel({ left, center, right }: ThreePanelProps) {
 
       {/* Left Resize Handle */}
       <div
-        className="w-1 flex-shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent/30"
+        className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent/30"
         onMouseDown={handleMouseDown("left")}
       />
 
@@ -80,39 +93,38 @@ export function ThreePanel({ left, center, right }: ThreePanelProps) {
         {center}
       </div>
 
-      {/* Right Sidebar Toggle */}
-      <div className="flex w-8 flex-shrink-0 flex-col items-center border-l border-border bg-background">
-        <button
-          type="button"
-          onClick={() => setRightCollapsed((value) => !value)}
-          className="mt-2 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-expanded={!rightCollapsed}
-          aria-label={rightCollapsed ? "展开产出侧边栏" : "收起产出侧边栏"}
-          title={rightCollapsed ? "展开产出" : "收起产出"}
-        >
-          {rightCollapsed ? (
-            <PanelRightOpen size={16} />
-          ) : (
-            <PanelRightClose size={16} />
-          )}
-        </button>
-        {!rightCollapsed && (
-          <div
-            className="mt-2 w-full flex-1 cursor-col-resize bg-transparent transition-colors hover:bg-accent/20"
-            onMouseDown={handleMouseDown("right")}
-            title="拖拽调整产出侧边栏宽度"
-          />
-        )}
-      </div>
-
       {/* Right Panel */}
-      {!rightCollapsed && (
+      {renderRight() ? (
         <div
-          className="flex-shrink-0 overflow-y-auto border-l border-border"
+          className="shrink-0 overflow-y-auto border-l border-border"
           style={{ width: rightWidth }}
         >
-          {right}
+          {renderRight()}
         </div>
+      ) : (
+        /* Collapsed: show toggle button in center panel area */
+        <div className="flex w-8 shrink-0 items-center justify-center border-l border-border bg-background">
+          <button
+            type="button"
+            onClick={onRightToggle}
+            className="flex items-center justify-center rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="展开产出"
+            title="展开产出"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Right Resize Handle (only when expanded) */}
+      {!rightCollapsed && (
+        <div
+          className="w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-accent/30"
+          onMouseDown={handleMouseDown("right")}
+          title="拖拽调整产出侧边栏宽度"
+        />
       )}
     </div>
   );

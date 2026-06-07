@@ -1,141 +1,103 @@
 # Authoring guide
 
-How to turn a user request ("make me a deck about X") into a finished
-html-ppt deck. Follow these steps in order.
+How to turn a user request ("make me a deck about X") into a finished,
+downloadable HTML deck **in this repository's current workflow**.
 
-## 1. Understand the deck
+## 1. Clarify only what matters
 
-Before touching files, clarify:
+Before generating slides, identify:
 
-1. **Audience** — engineers? designers? executives? consumers?
-2. **Length** — 5 min lightning? 20 min share? 45 min talk?
-3. **Language** — Chinese, English, bilingual? (Noto Sans SC is preloaded.)
-4. **Format** — on-screen live, PDF export, 小红书图文?
-5. **Tone** — clinical / playful / editorial / cyber?
+1. **Audience** — engineers / managers / new hires / mixed audience
+2. **Length** — 5-8 slides / 10-15 slides / 15-20 slides
+3. **Tone** — formal / practical / friendly / technical
+4. **Format** — live presentation / training material / reference handout
+5. **Need speaker notes?** — yes if it is a talk, workshop, or roadshow
 
-The audience + tone map to a theme; the length maps to slide count; the
-format maps to runtime features (live → notes + T-cycle; PDF → page-break
-CSS, already handled in `base.css`).
+## 2. Choose one visual direction
 
-## 2. Pick a theme
+- Theme selection: use `references/themes.md`
+- Slide structure: use `references/layouts.md`
+- Overall art direction: use `references/full-decks.md`
 
-Use `references/themes.md`. When in doubt:
+Do **not** try to open nonexistent local template folders. The current package
+ships reference documents plus shared assets, not checked-in example decks.
 
-- **Engineers** → `catppuccin-mocha` / `tokyo-night` / `dracula`.
-- **Designers / product** → `editorial-serif` / `aurora` / `soft-pastel`.
-- **Execs** → `minimal-white` / `arctic-cool` / `swiss-grid`.
-- **Consumers** → `xiaohongshu-white` / `sunset-warm` / `soft-pastel`.
-- **Cyber / CLI / infra** → `terminal-green` / `blueprint` / `gruvbox-dark`.
-- **Pitch / bold** → `neo-brutalism` / `sharp-mono` / `bauhaus`.
-- **Launch / product reveal** → `glassmorphism` / `aurora`.
+## 3. Build the outline first
 
-Wire the theme as `<link id="theme-link" href="../assets/themes/NAME.css">`
-and list 3-5 alternatives in `data-themes` so the user can press T to audition.
+A reliable training deck usually follows:
 
-## 3. Outline the deck
-
-A solid 20-minute deck is usually:
-
-```
-cover → toc → section-divider #1 → [2-4 body pages] →
-section-divider #2 → [2-4 body pages] → section-divider #3 →
-[2-4 body pages] → cta → thanks
+```text
+cover -> agenda -> section divider -> 2-4 body slides ->
+section divider -> 2-4 body slides -> summary -> next steps
 ```
 
-Pick 1 layout per page from `references/layouts.md`. Don't repeat the same
-layout twice in a row.
+Match slide count to duration:
 
-## 4. Scaffold the deck
+- 15 minutes: 5-8 slides
+- 30 minutes: 10-15 slides
+- 60 minutes: 15-20 slides
+
+## 4. Write complete HTML directly
+
+Generate a full HTML document using the standard asset references:
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deck title</title>
+  <link rel="stylesheet" href="./assets/base.css">
+  <link rel="stylesheet" href="./assets/fonts.css">
+  <link rel="stylesheet" id="theme-link" href="./assets/themes/tokyo-night.css">
+  <link rel="stylesheet" href="./assets/animations/animations.css">
+</head>
+<body data-themes="tokyo-night,catppuccin-mocha,corporate-clean">
+  <div class="deck">
+    <section class="slide is-active" data-title="Cover">
+      ...
+    </section>
+  </div>
+  <script src="./assets/runtime.js"></script>
+</body>
+</html>
+```
+
+## 5. Author slide-by-slide
+
+For each slide:
+
+1. Pick one pattern from `references/layouts.md`
+2. Keep one main message per slide
+3. Add light animation with `data-anim="fade-up"` or `data-anim="rise-in"`
+4. Add speaker notes in `.notes` when the deck is intended for live delivery
+
+## 6. Use animations sparingly
+
+- Cover/title: `rise-in`, `blur-in`
+- Bullet/content pages: `fade-up`
+- Lists/cards: `anim-stagger-list`
+- Section divider: `perspective-zoom` or `cube-rotate-3d`
+- Closing page: optional stronger accent effect
+
+One hero animation per slide is usually enough.
+
+## 7. Save through the provided script
+
+Do **not** write temp files or invent a second save path. Call:
 
 ```bash
-./scripts/new-deck.sh my-talk
+python3 ${SKILL_DIR}/scripts/save_and_output.py '<JSON_ARGS>'
 ```
 
-This copies `templates/deck.html` into `examples/my-talk/index.html` with
-paths rewritten. Add/remove `<section class="slide">` blocks to match your
-outline.
+The script will inline `./assets/*`, save the bundled HTML into the workspace
+outputs directory, and return the saved file metadata.
 
-## 5. Author each slide
+## 8. What not to do
 
-For each outline item:
-
-1. Open the matching single-page layout, e.g. `templates/single-page/kpi-grid.html`.
-2. Copy the `<section class="slide">…</section>` block.
-3. Paste into your deck.
-4. Replace demo data with real data. Keep the class structure intact.
-5. Set `data-title="..."` (used by the Overview grid).
-6. Add `<div class="notes">…</div>` with speaker notes.
-
-## 6. Add animations sparingly
-
-Rules of thumb:
-
-- Cover/title: `rise-in` or `blur-in`.
-- Body content: `fade-up` for the hero element, `stagger-list` for grids/lists.
-- Stat pages: `counter-up`.
-- Section dividers: `perspective-zoom` or `cube-rotate-3d`.
-- Closer: `confetti-burst` on the "Thanks" text.
-
-Pick **one** accent animation per slide. Everything else should be calm.
-
-## 7. Chinese + English decks
-
-- Fonts are already imported in `fonts.css` (Noto Sans SC + Noto Serif SC).
-- Use `lang="zh-CN"` on `<html>`.
-- For bilingual titles, stack lines: `<h1 class="h1">主标题<br><span class="dim">English subtitle</span></h1>`.
-- Keep English subtitles in a lighter weight (300) and dim color to avoid
-  visual competition.
-
-## 8. Review in-browser
-
-```bash
-open examples/my-talk/index.html
-```
-
-Walk through every slide with ← →. Press:
-
-- **O** — overview grid; catch any layout clipping.
-- **T** — cycle themes; make sure nothing looks broken in any theme.
-- **S** — open speaker notes; verify every slide has notes.
-
-## 9. Export to PNG
-
-```bash
-# single slide
-./scripts/render.sh examples/my-talk/index.html
-
-# all slides (autodetect count by looking for .slide sections)
-./scripts/render.sh examples/my-talk/index.html all
-
-# explicit slide count + output dir
-./scripts/render.sh examples/my-talk/index.html 12 out/my-talk-png
-```
-
-Output is 1920×1080 by default. Change in `render.sh` if the user wants 3:4
-for 小红书图文 (1242×1660).
-
-## 10. What to NOT do
-
-- Don't hand-author from a blank file.
-- Don't use raw hex colors in slide markup. Use tokens.
-- Don't load heavy animation frameworks. Everything should stay within the
-  CSS/JS that already ships.
-- Don't add more than one new template file unless a genuinely new layout
-  type is needed. Prefer composition.
-- Don't delete slides from the showcase decks.
-- **Don't put presenter-only text on the slide.** Any descriptive text,
-  narration cues, or explanations meant for the speaker (e.g. "这一页的重点是…",
-  "Note: mention X here", small grey captions explaining the slide's purpose)
-  MUST go inside `<div class="notes">`, not as visible elements. The `.notes`
-  div is hidden (`display:none`) and only shown via the S overlay. Slides
-  should contain ONLY audience-facing content.
-
-## Troubleshooting
-
-- **Theme doesn't switch with T**: check `data-themes` on `<body>` and
-  `data-theme-base` pointing to the themes directory relative to the HTML
-  file.
-- **Fonts fall back**: make sure `fonts.css` is linked before the theme.
-- **Chart.js colors wrong**: charts read CSS vars in JS; make sure they run
-  after the DOM is ready (`addEventListener('DOMContentLoaded', …)`).
-- **PNG too small**: bump `--window-size` in `scripts/render.sh`.
+- Do not browse or reference missing `templates/` directories.
+- Do not rely on `scripts/new-deck.sh` or `scripts/render.sh`; they are not
+  part of the current package.
+- Do not expose internal file paths or terminal details to the user.
+- Do not put presenter-only narration directly on visible slides.

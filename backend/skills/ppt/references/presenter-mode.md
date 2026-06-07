@@ -16,22 +16,17 @@
 
 ## 两种做法
 
-### ✅ 推荐做法：直接用 `presenter-mode-reveal` 模板
+### ✅ 推荐做法：在生成的 deck 里直接加入演讲者备注
 
-```bash
-cp -r templates/full-decks/presenter-mode-reveal examples/my-talk
-```
+当前仓库没有可直接复制的 `presenter-mode-reveal` 本地模板目录。
+应当直接在最终 HTML 里补齐以下要素：
 
-这个模板已经预设好所有必需元素：
-- 支持 S 键切换演讲者视图
-- 5 个主题可用 T 键循环（tokyo-night / dracula / catppuccin-mocha / nord / corporate-clean）
-- 左右键翻页
-- 每一页都有 150–300 字的示例逐字稿
-- 底部有键位提示
+- 支持 S 键查看演讲者视图（由 `assets/runtime.js` 提供）
+- 3-5 个主题可通过 `data-themes` + T 键切换
+- 每一页都有 150-300 字的 `<aside class="notes">` 或 `<div class="notes">`
+- 封面页和总结页的讲稿更完整，中间页聚焦提示信号
 
-直接改内容即可。
-
-### 🔧 进阶做法：给任意已有模板加演讲者模式
+### 🔧 通用做法：给任意生成 deck 加演讲者模式
 
 html-ppt 的 **S 键演讲者视图是 `runtime.js` 内置的，所有 full-deck 模板都自动支持**。你只需要做两件事：
 

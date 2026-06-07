@@ -10,11 +10,15 @@ import {
   FileText,
   MoreHorizontal,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { listTasks, deleteTask, type Task } from "@/lib/api";
 
 interface TaskPanelProps {
   workspaceId: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 const TYPE_CONFIG: Record<
@@ -46,7 +50,7 @@ const STATUS_CONFIG = {
   },
 } as const;
 
-export function TaskPanel({ workspaceId }: TaskPanelProps) {
+export function TaskPanel({ workspaceId, collapsed, onToggle }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const fetchTasks = useCallback(async () => {
@@ -67,7 +71,18 @@ export function TaskPanel({ workspaceId }: TaskPanelProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="border-b border-border px-4 py-3">
+      <div className="flex items-center border-b border-border px-4 py-3 gap-2">
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label={collapsed ? "展开产出" : "收起产出"}
+            title={collapsed ? "展开产出" : "收起产出"}
+          >
+            {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          </button>
+        )}
         <h3 className="text-sm font-medium text-foreground">产出</h3>
       </div>
 

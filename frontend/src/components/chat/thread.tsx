@@ -67,6 +67,20 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function tryParseJSONObject(rawText: string): Record<string, any> | null {
+  const trimmed = rawText.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function toolCallFingerprint(toolCall: ExtractedToolCall): string {
   return `${toolCall.name}:${stableStringify(toolCall.args)}`;
 }
@@ -342,7 +356,7 @@ function AITurnBubble({ turn }: { turn: AITurn }) {
 const TOOL_LABELS: Record<string, string> = {
   terminal: "命令执行",
   rag_search: "知识库检索",
-  load_skill: "加载技能",
+  load_skill: "读取技能",
   save_output: "保存产出",
   clarify_form: "信息收集",
 };
@@ -434,15 +448,103 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
   terminal: {
     label: () => "命令执行",
     expandable: false,
-    summary: () => "执行详情已隐藏",
+    summary: () => "",
   },
   load_skill: {
     label: ({ toolCall }) => {
       const skillName = getToolArgString(toolCall.args, ["skill_name", "name"]);
-      return skillName ? `加载技能：${skillName}` : "加载技能";
+      const filePaths = toolCall.args["file_paths"] as string[] | undefined;
+      if (filePaths && filePaths.length > 0) {
+        return skillName ? `读取技能：${skillName}` : "读取技能";
+      }
+      return skillName ? `读取技能：${skillName}` : "读取技能";
     },
     expandable: true,
-    details: ({ result }) => <ToolTextBlock value={extractToolResultText(result)} />,
+    summary: ({ toolCall }) => {
+      const skillName = getToolArgString(toolCall.args, ["skill_name", "name"]);
+      const filePaths = toolCall.args["file_paths"] as string[] | undefined;
+      if (filePaths && filePaths.length > 0) {
+        return filePaths.join(", ");
+      }
+      return "SKILL.md";
+    },
+    details: ({ result }) => {
+      const rawText = extractToolResultText(result);
+      // Reusable markdown components
+      const mdComponents = {
+        code: ({ className, children, ...rest }: any) => {
+          const match = /language-(\w+)/.exec(className || "");
+          const codeString = String(children).replace(/\n$/, "");
+          if (match) {
+            return (
+              <SyntaxHighlighter
+                style={oneDark}
+                language={match[1]}
+                PreTag="div"
+                customStyle={{ margin: 0, borderRadius: "0.5rem", fontSize: "0.85em" }}
+              >
+                {codeString}
+              </SyntaxHighlighter>
+            );
+          }
+          return <code className={className} {...rest}>{children}</code>;
+        },
+        table: ({ children, ...rest }: any) => (
+          <div className="overflow-x-auto">
+            <table className="w-max min-w-full" {...rest}>{children}</table>
+          </div>
+        ),
+        h1: ({ children, ...rest }: any) => <h1 className="text-lg font-bold mt-4 mb-2" {...rest}>{children}</h1>,
+        h2: ({ children, ...rest }: any) => <h2 className="text-base font-semibold mt-3 mb-2" {...rest}>{children}</h2>,
+        h3: ({ children, ...rest }: any) => <h3 className="text-sm font-medium mt-2 mb-1" {...rest}>{children}</h3>,
+        p: ({ children, ...rest }: any) => <p className="my-1" {...rest}>{children}</p>,
+        ul: ({ children, ...rest }: any) => <ul className="list-disc list-inside my-1 space-y-1" {...rest}>{children}</ul>,
+        ol: ({ children, ...rest }: any) => <ol className="list-decimal list-inside my-1 space-y-1" {...rest}>{children}</ol>,
+        li: ({ children, ...rest }: any) => <li className="text-xs" {...rest}>{children}</li>,
+        blockquote: ({ children, ...rest }: any) => <blockquote className="border-l-2 border-accent/50 pl-2 my-1 text-xs" {...rest}>{children}</blockquote>,
+        a: ({ href, children, ...rest }: any) => <a href={href} className="text-accent underline" target="_blank" rel="noopener noreferrer" {...rest}>{children}</a>,
+      };
+
+      const data = tryParseJSONObject(rawText);
+      if (data?.files) {
+        const entries = Object.entries(data.files);
+        if (entries.length === 0) {
+          return <ToolTextBlock value="(no content)" />;
+        }
+        return (
+          <div className="max-h-96 overflow-y-auto space-y-3">
+            {entries.map(([path, content]) => (
+              <div key={path}>
+                <p className="text-[10px] text-accent mb-1 font-medium">{path}</p>
+                <div className="rounded border border-border/40 bg-background/50 p-2 max-h-64 overflow-y-auto">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                    {String(content ?? "")}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      }
+      if (typeof data?.content === "string") {
+        // Strip YAML frontmatter if present
+        let content = data.content;
+        if (content.startsWith("---")) {
+          const endIdx = content.indexOf("---", 3);
+          if (endIdx !== -1) {
+            content = content.slice(endIdx + 3).trim();
+          }
+        }
+        return (
+          <div className="max-h-96 overflow-y-auto rounded border border-border/40 bg-background/50 p-2">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+              {content}
+            </ReactMarkdown>
+          </div>
+        );
+      }
+      return <ToolTextBlock value={rawText} />;
+    },
   },
   clarify_form: {
     label: () => "信息收集",
@@ -493,9 +595,8 @@ function ToolCallCard({
           if (canExpand) setExpanded((value) => !value);
         }}
         disabled={!canExpand}
-        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${
-          canExpand ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
-        }`}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${canExpand ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
+          }`}
       >
         <span className="text-green-400">✓</span>
         <span className="shrink-0 font-medium">{label}</span>
@@ -507,9 +608,8 @@ function ToolCallCard({
         {canExpand && (
           <ChevronDown
             size={13}
-            className={`ml-auto shrink-0 transition-transform ${
-              expanded ? "rotate-180" : ""
-            }`}
+            className={`ml-auto shrink-0 transition-transform ${expanded ? "rotate-180" : ""
+              }`}
           />
         )}
       </button>
@@ -572,18 +672,18 @@ function HumanBubble({
   pending?: boolean;
 }) {
   // Parse "/command rest" pattern to render pill + text
-  const slashMatch = text.match(/^(\/\w+)\s([\s\S]*)$/);
+  // Allow command to be sent alone (e.g. "/ppt") or with additional text
+  const slashMatch = text.match(/^(\/\w+)(?:\s([\s\S]*))?$/);
   const command = slashMatch
     ? SLASH_COMMANDS.find((c) => c.command === slashMatch[1])
     : null;
-  const displayText = command ? slashMatch![2] : text;
+  const displayText = command ? (slashMatch![2] || "") : text;
 
   return (
     <div className="flex justify-end">
       <div
-        className={`max-w-[80%] rounded-2xl rounded-br-md bg-accent/20 px-4 py-2.5 text-sm text-foreground ${
-          pending ? "opacity-70" : ""
-        }`}
+        className={`max-w-[80%] rounded-2xl rounded-br-md bg-accent/20 px-4 py-2.5 text-sm text-foreground ${pending ? "opacity-70" : ""
+          }`}
       >
         {command && (
           <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-xs text-accent mr-2 align-middle">
@@ -679,11 +779,10 @@ function SlashCommandMenu({
             e.preventDefault();
             onSelect(cmd);
           }}
-          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
-            index === selectedIndex
-              ? "bg-accent/15 text-foreground"
-              : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
-          }`}
+          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${index === selectedIndex
+            ? "bg-accent/15 text-foreground"
+            : "text-muted-foreground hover:bg-muted/30 hover:text-foreground"
+            }`}
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
             {cmd.icon}
@@ -781,12 +880,12 @@ function ChatInput() {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (isMenuVisible) return;
-    const trimmed = text.trim();
-    if (!trimmed || isLoading) return;
-    // Encode slash command into content: "/command userInput"
+    if (isLoading) return;
+    // Allow slash command to be sent alone, or with additional text
     const content = activeCommand
-      ? `${activeCommand.command} ${trimmed}`
-      : trimmed;
+      ? (text.trim() ? `${activeCommand.command} ${text.trim()}` : activeCommand.command)
+      : text.trim();
+    if (!content) return;
     submit(content);
     setText("");
     setActiveCommand(null);
@@ -824,11 +923,10 @@ function ChatInput() {
           type="button"
           onMouseDown={(e) => { e.preventDefault(); openSkillMenu(); }}
           title="技能"
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-            activeCommand
-              ? "bg-accent/20 text-accent"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-accent"
-          }`}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${activeCommand
+            ? "bg-accent/20 text-accent"
+            : "text-muted-foreground hover:bg-muted/50 hover:text-accent"
+            }`}
         >
           <Zap size={16} />
         </button>
@@ -870,7 +968,7 @@ function ChatInput() {
         ) : (
           <button
             type="submit"
-            disabled={!text.trim()}
+            disabled={!text.trim() && !activeCommand}
             className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-30"
           >
             <SendHorizontal size={14} />
@@ -1083,11 +1181,10 @@ function MessageActions({ content }: { content: string }) {
         onClick={() =>
           setFeedback(feedback === "like" ? null : "like")
         }
-        className={`rounded-md p-1 transition-colors ${
-          feedback === "like"
-            ? "text-green-400"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        }`}
+        className={`rounded-md p-1 transition-colors ${feedback === "like"
+          ? "text-green-400"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          }`}
         title="有帮助"
       >
         <ThumbsUp size={14} />
@@ -1096,11 +1193,10 @@ function MessageActions({ content }: { content: string }) {
         onClick={() =>
           setFeedback(feedback === "dislike" ? null : "dislike")
         }
-        className={`rounded-md p-1 transition-colors ${
-          feedback === "dislike"
-            ? "text-red-400"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        }`}
+        className={`rounded-md p-1 transition-colors ${feedback === "dislike"
+          ? "text-red-400"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          }`}
         title="没有帮助"
       >
         <ThumbsDown size={14} />

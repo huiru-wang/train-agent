@@ -37,7 +37,7 @@ def create_graph(
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
         ),
         streaming=True,
-        model_kwargs={"extra_body": {"enable_thinking": True}},
+        extra_body={"enable_thinking": True},
     )
 
     # --- Tools ---
@@ -57,7 +57,8 @@ def create_graph(
             docs = await db.list_documents(workspace_id)
             doc_summaries = [
                 f"[{d['filename']}](id:{d['id'][:8]}): {d['summary']}"
-                for d in docs if d.get("summary")
+                for d in docs
+                if d.get("summary")
             ]
 
         prompt = SYSTEM_PROMPT
@@ -75,7 +76,7 @@ def create_graph(
     # --- Middleware: patch empty tool_call IDs from DashScope ---
     @wrap_model_call
     async def patch_tool_call_ids(request, handler):  # ← 加 async
-        response = await handler(request)              # ← 加 await
+        response = await handler(request)  # ← 加 await
         ai_msg = response.result[0] if response.result else None
         if ai_msg and isinstance(ai_msg, AIMessage) and ai_msg.tool_calls:
             fixed = [
@@ -104,9 +105,7 @@ def _make_default_graph():
     _db = Database(f"{data_dir}/train_agent.db")
     _vector_store = VectorStore(f"{data_dir}/chroma")
     _file_store = FileStore(f"{data_dir}/files")
-    _skill_manager = SkillManager(
-        os.path.join(os.path.dirname(__file__), "../../skills")
-    )
+    _skill_manager = SkillManager(os.path.join(os.path.dirname(__file__), "../../skills"))
     return create_graph(
         db=_db,
         vector_store=_vector_store,

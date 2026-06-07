@@ -159,8 +159,14 @@ class Database:
         )
         await self.connection.commit()
 
-    async def delete_document(self, doc_id: str):
-        await self.connection.execute("DELETE FROM document WHERE id = ?", (doc_id,))
+    async def delete_document(self, doc_id: str, workspace_id: str = None):
+        if workspace_id:
+            await self.connection.execute(
+                "DELETE FROM document WHERE id = ? AND workspace_id = ?",
+                (doc_id, workspace_id),
+            )
+        else:
+            await self.connection.execute("DELETE FROM document WHERE id = ?", (doc_id,))
         await self.connection.commit()
 
     # --- Task ---

@@ -1,103 +1,54 @@
 # Layouts catalog
 
-Every layout lives in `templates/single-page/<name>.html` as a fully
-functional standalone page with realistic demo data. Open any file directly
-in Chrome to see it working.
+This repository does **not** ship browsable `templates/single-page/*.html`
+files. Treat this document as a layout decision guide, then write the final
+`<section class="slide">...</section>` blocks directly in the generated deck.
 
-To compose a new deck: open the file, copy the `<section class="slide">…</section>`
-block (or multiple blocks) into your deck HTML, and replace the demo data.
-Shared CSS (base, theme, animations) is already wired by `deck.html`.
+Each slide should stay within one clear layout pattern. If the content does not
+fit, split it into multiple slides instead of compressing typography.
 
-## Openers & transitions
+## Openers & navigation
 
-| file | purpose |
-|---|---|
-| `cover.html` | Deck cover. Kicker + huge title + lede + pill row. |
-| `toc.html` | Table of contents. 2×3 grid of numbered cards. |
-| `section-divider.html` | Big numbered section break (02 · Theme). |
+| pattern | when to use | recommended structure |
+|---|---|---|
+| `cover` | Title page, opening promise | eyebrow + large title + subtitle + 2-4 topic pills |
+| `toc` | Agenda / course outline | title + 4-6 numbered cards |
+| `section-divider` | Start of a new chapter | section number + short chapter name + one-sentence transition |
 
-## Text-centric
+## Text-centric slides
 
-| file | purpose |
-|---|---|
-| `bullets.html` | Classic bullet list with card-wrapped items. |
-| `two-column.html` | Concept + example side by side. |
-| `three-column.html` | Three equal pillars with icons. |
-| `big-quote.html` | Full-bleed pull quote in editorial-serif style. |
+| pattern | when to use | recommended structure |
+|---|---|---|
+| `bullet-list` | Explain 4-6 key ideas | title + concise bullet list |
+| `two-column` | Concept vs example / before vs after | title + left/right comparison |
+| `three-column` | Parallel categories | title + 3 equally weighted cards |
+| `quote-centered` | Principle / memorable sentence | quote + attribution or takeaway |
 
-## Numbers & data
+## Data & structure
 
-| file | purpose |
-|---|---|
-| `stat-highlight.html` | One giant number + subtitle (uses `.counter` animation). |
-| `kpi-grid.html` | 4 KPIs in a row with up/down deltas. |
-| `table.html` | Data table with hover rows, right-aligned numerics. |
-| `chart-bar.html` | Chart.js bar chart, theme-aware colors. |
-| `chart-line.html` | Chart.js dual-line chart with filled area. |
-| `chart-pie.html` | Chart.js doughnut + takeaways card. |
-| `chart-radar.html` | Chart.js radar comparing 2 products on 6 axes. |
+| pattern | when to use | recommended structure |
+|---|---|---|
+| `kpi-grid` | 3-4 numbers or metrics | title + 3-4 stat cards |
+| `table` | Structured comparison | title + compact table + one takeaway line |
+| `process-flow` | Ordered steps | title + 3-6 connected steps |
+| `matrix` | 2x2 categorization | title + quadrant labels + short annotations |
 
-## Code & terminal
+## Training-friendly slides
 
-| file | purpose |
-|---|---|
-| `code.html` | Syntax-highlighted code via highlight.js (JS example). |
-| `diff.html` | Hand-rolled +/- diff view. |
-| `terminal.html` | Terminal window mock with traffic-light header. |
+| pattern | when to use | recommended structure |
+|---|---|---|
+| `concept-cards` | Vocabulary / feature clusters | title + 4-6 concept cards |
+| `example-breakdown` | Code / scenario walk-through | title + example block + annotated points |
+| `checklist` | Actionable guidance | title + yes/no or do/don't checklist |
+| `summary` | Recap page | title + 3-5 key reminders |
 
-## Diagrams & flows
+## Authoring rules
 
-| file | purpose |
-|---|---|
-| `flow-diagram.html` | 5-node pipeline with arrows and one highlighted node. |
-| `arch-diagram.html` | 3-tier architecture grid. |
-| `process-steps.html` | 4 numbered steps in cards. |
-| `mindmap.html` | Radial mindmap with SVG path-draw animation. |
-
-## Plans & comparisons
-
-| file | purpose |
-|---|---|
-| `timeline.html` | 5-point horizontal timeline with dots. |
-| `roadmap.html` | 4-column NOW / NEXT / LATER / VISION. |
-| `gantt.html` | 12-week gantt chart with 5 parallel tracks. |
-| `comparison.html` | Before vs After two-panel card. |
-| `pros-cons.html` | Pros and cons two-card layout. |
-| `todo-checklist.html` | Checklist with checked/unchecked states. |
-
-## Visuals
-
-| file | purpose |
-|---|---|
-| `image-hero.html` | Full-bleed hero with Ken Burns gradient background. |
-| `image-grid.html` | 7-cell bento grid with gradient placeholders. |
-
-## Closers
-
-| file | purpose |
-|---|---|
-| `cta.html` | Call-to-action with big gradient headline + buttons. |
-| `thanks.html` | Final "Thanks" page with confetti burst. |
-
-## Picking a layout
-
-- **Opener**: `cover.html`, often followed by `toc.html`.
-- **Section break**: `section-divider.html` before every major section.
-- **Core content**: `bullets.html`, `two-column.html`, `three-column.html`.
-- **Show numbers**: `stat-highlight.html` (single) or `kpi-grid.html` (4-up).
-- **Show plot**: `chart-bar.html` / `chart-line.html` / `chart-pie.html` / `chart-radar.html`.
-- **Show a diff or change**: `comparison.html`, `diff.html`, `pros-cons.html`.
-- **Show a plan**: `timeline.html`, `roadmap.html`, `gantt.html`, `process-steps.html`.
-- **Show architecture**: `arch-diagram.html`, `flow-diagram.html`, `mindmap.html`.
-- **Code / demo**: `code.html`, `terminal.html`.
-- **Closer**: `cta.html` → `thanks.html`.
-
-## Naming / structure conventions
-
-- Each slide is `<section class="slide" data-title="...">`.
-- Header pills: `<p class="kicker">…</p>`, eyebrow: `<p class="eyebrow">…</p>`.
-- Titles: `<h1 class="h1">…</h1>` / `<h2 class="h2">…</h2>`.
-- Lede: `<p class="lede">…</p>`.
-- Cards: `<div class="card">…</div>` (variants: `card-soft`, `card-outline`, `card-accent`).
-- Grids: `.grid.g2`, `.grid.g3`, `.grid.g4`.
-- Notes: `<div class="notes">…</div>` per slide.
+- Keep one main message per slide.
+- Prefer `data-anim="fade-up"` or `data-anim="rise-in"` on the headline element.
+- Use `class="anim-stagger-list"` for lists or card grids that should reveal
+  item-by-item.
+- Put speaker notes in `<div class="notes">...</div>` or
+  `<aside class="notes">...</aside>`.
+- Use CSS tokens from the theme; do not hardcode palette values unless a visual
+  accent is truly necessary.

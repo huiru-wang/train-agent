@@ -46,9 +46,10 @@ if [ -z "$FRONTEND_RUNNER" ]; then
 fi
 
 if [ ! -d "$FRONTEND/node_modules" ]; then
-  echo "Missing frontend dependencies: run '$FRONTEND_RUNNER install' in frontend/ first." >&2
-  echo "Run ./scripts/doctor.sh for setup details." >&2
-  exit 1
+  log "安装前端依赖..."
+  cd "$FRONTEND"
+  "$FRONTEND_RUNNER" install
+  cd "$ROOT"
 fi
 
 # --- Start Backend API ---

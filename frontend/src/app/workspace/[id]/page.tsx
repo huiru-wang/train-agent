@@ -14,6 +14,7 @@ export default function WorkspacePage() {
   const router = useRouter();
   const workspaceId = params.id as string;
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
 
   useEffect(() => {
     getWorkspace(workspaceId)
@@ -52,7 +53,9 @@ export default function WorkspacePage() {
         <ThreePanel
           left={<DocumentPanel workspaceId={workspaceId} />}
           center={<ChatPanel workspaceId={workspaceId} />}
-          right={<TaskPanel workspaceId={workspaceId} />}
+          right={<TaskPanel workspaceId={workspaceId} collapsed={rightCollapsed} onToggle={() => setRightCollapsed((v) => !v)} />}
+          rightCollapsed={rightCollapsed}
+          onRightToggle={() => setRightCollapsed((v) => !v)}
         />
       </div>
     </div>

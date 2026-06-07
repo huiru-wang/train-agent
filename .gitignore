@@ -25,3 +25,6 @@ logs/
 .vscode/
 *.swp
 .DS_Store
+
+# Agent
+.claude/

@@ -139,6 +139,19 @@ class DocService:
         row = await cursor.fetchone()
         return dict(row) if row else None
 
+    async def delete_workspace(self, workspace_id: str):
+        """Delete all documents, vector store entries, and files for a workspace."""
+        docs = await self.db.list_documents(workspace_id)
+        for doc in docs:
+            if doc.get("storage_path"):
+                self.file_store.delete(doc["storage_path"])
+            self.vector_store.delete_by_doc_id(workspace_id, doc["id"])
+            await self.db.delete_document(doc["id"], workspace_id)
+        # Delete vector store collection
+        self.vector_store.delete_workspace(workspace_id)
+        # Delete file store directory
+        self.file_store.delete_workspace(workspace_id)
+
     async def delete_document(self, workspace_id: str, doc_id: str):
         docs = await self.db.list_documents(workspace_id)
         doc = next((d for d in docs if d["id"] == doc_id), None)
@@ -146,7 +159,7 @@ class DocService:
             if doc.get("storage_path"):
                 self.file_store.delete(doc["storage_path"])
             self.vector_store.delete_by_doc_id(workspace_id, doc_id)
-            await self.db.delete_document(doc_id)
+            await self.db.delete_document(doc_id, workspace_id)
 
     # ------------------------------------------------------------------
     # Parsing
@@ -187,11 +200,18 @@ class DocService:
             return text[:500] + "..." if len(text) > 500 else text
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        messages = [
-            SystemMessage(
-                content="用一段话总结以下文档的核心内容，200字以内："
-            ),
-            HumanMessage(content=text[:8000]),
-        ]
-        response = await self.llm.ainvoke(messages)
-        return response.content
+        try:
+            messages = [
+                SystemMessage(
+                    content="用一段话总结以下文档的核心内容，200字以内："
+                ),
+                HumanMessage(content=text[:8000]),
+            ]
+            response = await self.llm.ainvoke(messages)
+            return response.content
+        except Exception as exc:
+            logger.warning(
+                "[DocService] LLM summary failed, using fallback: %s", exc
+            )
+            # 返回截断文本作为 fallback，不暴露 LLM 错误
+            return text[:500] + "..." if len(text) > 500 else text

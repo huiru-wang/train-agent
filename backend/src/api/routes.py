@@ -84,6 +84,9 @@ async def update_workspace_thread(workspace_id: str, req: UpdateThreadRequest):
 @app.delete("/api/workspaces/{workspace_id}")
 async def delete_workspace(workspace_id: str):
     logger.info("[API] DELETE /api/workspaces/%s", workspace_id)
+    # Delete all documents, vector store, and files
+    await doc_service.delete_workspace(workspace_id)
+    # Delete workspace record from database
     await db.delete_workspace(workspace_id)
     return {"ok": True}
 

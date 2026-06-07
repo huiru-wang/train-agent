@@ -25,7 +25,7 @@ const STATUS_CONFIG = {
   uploaded: { icon: Loader2, color: "text-blue-500", label: "已上传" },
   processing: { icon: Loader2, color: "text-yellow-500", label: "处理中" },
   parsing: { icon: Loader2, color: "text-yellow-500", label: "正在解析" },
-  parsed: { icon: Loader2, color: "text-yellow-500", label: "已解析" },
+  parsed: { icon: Loader2, color: "text-yellow-500", label: "已解析，等待处理" },
   chunking: { icon: Loader2, color: "text-yellow-500", label: "正在分块" },
   indexing: { icon: Loader2, color: "text-yellow-500", label: "正在入库" },
   summarizing: { icon: Loader2, color: "text-yellow-500", label: "正在理解文档" },

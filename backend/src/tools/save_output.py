@@ -83,8 +83,6 @@ async def save_output_artifact(
             filename = f"{safe_title}{ext_map.get(type, '.txt')}"
 
         final_content = content
-        if type == "ppt":
-            final_content = _inline_ppt_assets(content)
 
         file_path = await file_store.save_async(
             workspace_id,
