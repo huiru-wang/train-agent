@@ -1,274 +1,338 @@
 ---
 name: ppt
-description: 当用户需要生成培训PPT、课件演示文稿时使用。基于 html-ppt 模板系统生成专业级 HTML 演示文稿，支持 36 种主题、31 种布局、27 种动画。
+description: Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a talk/pitch. Helps non-designers discover their aesthetic through visual exploration rather than abstract choices.
 ---
 
-# 培训PPT生成技能（html-ppt 集成版）
+# Frontend Slides
 
-基于 html-ppt 模板系统，结合知识库 RAG 检索，生成专业级零依赖 HTML 演示文稿。
+Create zero-dependency, animation-rich HTML presentations that run entirely in the browser.
 
-## 核心原则
+## Core Principles
 
-1. **模板驱动** — 始终从 html-ppt 的布局模板组合，不从零写 HTML
-2. **零依赖** — 单个 HTML 文件，打包后无外部依赖
-3. **视口适配** — 每张幻灯片精确适配 100vh，禁止滚动
-4. **培训导向** — 结构清晰，要点突出，适合教学场景
+1. **Zero Dependencies** — Single HTML files with inline CSS/JS. No npm, no build tools.
+2. **Show, Don't Tell** — Generate visual previews, not abstract choices. People discover what they want by seeing it.
+3. **Distinctive Design** — No generic "AI slop." Every presentation must feel custom-crafted.
+4. **Viewport Fitting (NON-NEGOTIABLE)** — Every slide MUST fit exactly within 100vh. No scrolling within slides, ever. Content overflows? Split into multiple slides.
 
-## 资产引用规则
+## Design Aesthetics
 
-生成的 HTML 中，所有资产通过相对路径引用（`./assets/`）：
+You tend to converge toward generic, "on distribution" outputs. In frontend design, this creates what users call the "AI slop" aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.
 
-```html
-<link rel="stylesheet" href="./assets/base.css">
-<link rel="stylesheet" href="./assets/fonts.css">
-<link rel="stylesheet" id="theme-link" href="./assets/themes/{theme-name}.css">
-<link rel="stylesheet" href="./assets/animations/animations.css">
-<script src="./assets/runtime.js"></script>
-```
+Focus on:
 
-如需 Canvas FX 动画，额外引用：
-```html
-<script src="./assets/animations/fx-runtime.js"></script>
-```
+- Typography: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics.
+- Color & Theme: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes. Draw from IDE themes and cultural aesthetics for inspiration.
+- Motion: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions.
+- Backgrounds: Create atmosphere and depth rather than defaulting to solid colors. Layer CSS gradients, use geometric patterns, or add contextual effects that match the overall aesthetic.
 
-> **注意**：这些相对路径会在打包步骤中被内联为 HTML 内嵌内容，最终产物无任何外部依赖。
+Avoid generic AI-generated aesthetics:
 
-## 执行流程
+- Overused font families (Inter, Roboto, Arial, system fonts)
+- Cliched color schemes (particularly purple gradients on white backgrounds)
+- Predictable layouts and component patterns
+- Cookie-cutter design that lacks context-specific character
 
-### 第一步：了解需求
+Interpret creatively and make unexpected choices that feel genuinely designed for the context. Vary between light and dark themes, different fonts, different aesthetics. You still tend to converge on common choices (Space Grotesk, for example) across generations. Avoid this: it is critical that you think outside the box!
 
-根据用户输入和对话上下文，判断还需要收集哪些信息。**不要照搬固定模板**，动态构建 `clarify_form`。
+## Viewport Fitting Rules
 
-#### 必须确认的信息
+These invariants apply to EVERY slide in EVERY presentation:
 
-#### 必须确认的信息
+- Every `.slide` must have `height: 100vh; height: 100dvh; overflow: hidden;`
+- ALL font sizes and spacing must use `clamp(min, preferred, max)` — never fixed px/rem
+- Content containers need `max-height` constraints
+- Images: `max-height: min(50vh, 400px)`
+- Breakpoints required for heights: 700px, 600px, 500px
+- Include `prefers-reduced-motion` support
+- Never negate CSS functions directly (`-clamp()`, `-min()`, `-max()` are silently ignored) — use `calc(-1 * clamp(...))` instead
 
-- **培训主题** — 如用户已明确（如 `/ppt Java开发规范`），直接采用，无需再问
-- **视觉风格** — 从 36 个主题中推荐 3-5 个最合适的作为选项
-- **内容风格** — 决定用语和表达方式：严谨正式 / 轻松易懂 / 技术干货
+**When generating, read `viewport-base.css` and include its full contents in every presentation.**
 
-#### 按需收集（根据上下文智能判断是否需要）
+### Content Density Limits Per Slide
 
-- **目标受众** — 如果从对话历史能推断（如之前讨论过"新员工培训"），则跳过
-- **培训时长** — 15分钟/30分钟/1小时，影响内容深度和页数（可根据时长自动推算页数，无需再单独问页数）
-- **内容侧重** — 理论讲解 / 案例驱动 / 实操清单 / 速查手册，决定幻灯片的组织方式
-- **互动元素** — 是否插入思考题、讨论环节、自查清单等提升培训参与感的内容
-- **演讲者备注** — 是否生成逐字稿（html-ppt 支持按 S 键查看演讲者备注）
-- **重点内容** — 如果知识库文档已充分覆盖主题，则跳过
-- **补充要求** — 自由文本，用于兜底个性化需求（如"多用代码示例"、"加入团队实际案例"等）
-#### 主题推荐逻辑
+| Slide Type    | Maximum Content                                           |
+| ------------- | --------------------------------------------------------- |
+| Title slide   | 1 heading + 1 subtitle + optional tagline                 |
+| Content slide | 1 heading + 4-6 bullet points OR 1 heading + 2 paragraphs |
+| Feature grid  | 1 heading + 6 cards maximum (2x3 or 3x2)                  |
+| Code slide    | 1 heading + 8-10 lines of code                            |
+| Quote slide   | 1 quote (max 3 lines) + attribution                       |
+| Image slide   | 1 heading + 1 image (max 60vh height)                     |
 
-根据培训场景和受众推荐主题选项：
-
-| 场景 | 推荐主题 |
-|------|---------|
-| 技术培训 / 编程规范 | `tokyo-night`, `catppuccin-mocha`, `blueprint`, `dracula` |
-| 管理层汇报 / 正式场合 | `corporate-clean`, `swiss-grid`, `minimal-white` |
-| 新人入职 / 通识培训 | `soft-pastel`, `aurora`, `catppuccin-latte` |
-| 安全 / 合规培训 | `nord`, `arctic-cool`, `solarized-light` |
-| 产品发布 / 宣讲 | `glassmorphism`, `pitch-deck-vc`, `magazine-bold` |
-| 用户说"酷一点"/"科技感" | `cyberpunk-neon`, `vaporwave`, `neo-brutalism` |
-| 学术 / 研究分享 | `academic-paper`, `editorial-serif`, `gruvbox-dark` |
-
-如需完整主题列表，使用 `load_skill` 加载 `references/themes.md`。
-
-#### 示例：动态构建表单
-
-用户说 `/ppt Java开发规范培训`，知识库有 Java 开发手册：
-
-```json
-{
-  "title": "PPT 配置确认",
-  "description": "主题已确认：Java开发规范培训。请确认以下选项：",
-  "fields": [
-    {
-      "name": "audience",
-      "label": "目标受众",
-      "type": "select",
-      "options": ["新员工", "技术团队", "全员"],
-      "required": true
-    },
-    {
-      "name": "style",
-      "label": "视觉风格",
-      "type": "select",
-      "options": ["tokyo-night（深色科技）", "catppuccin-mocha（柔和深色）", "blueprint（蓝图风）", "minimal-white（简洁白）"],
-      "required": true
-    },
-    {
-      "name": "duration",
-      "label": "培训时长",
-      "type": "select",
-      "options": ["15分钟（5-8页）", "30分钟（10-15页）", "1小时（15-20页）"],
-      "required": true
-    },
-    {
-      "name": "tone",
-      "label": "内容风格",
-      "type": "select",
-      "options": ["严谨正式", "轻松易懂", "技术干货"],
-      "required": true
-    },
-    {
-      "name": "focus",
-      "label": "内容侧重",
-      "type": "select",
-      "options": ["理论讲解", "案例驱动", "实操清单", "速查手册"],
-      "required": true
-    },
-    {
-      "name": "interactive",
-      "label": "互动元素",
-      "type": "multiselect",
-      "options": ["思考题", "讨论环节", "自查清单", "不需要"],
-      "required": false
-    },
-    {
-      "name": "speaker_notes",
-      "label": "是否生成演讲者逐字稿（按S键可查看）",
-      "type": "select",
-      "options": ["是", "否"],
-      "required": true
-    },
-    {
-      "name": "extra",
-      "label": "补充要求（可选，如：多用代码示例、加入真实案例等）",
-      "type": "text",
-      "required": false
-    }
-  ]
-}
-```
-
-### 第二步：检索知识库
-
-使用 `rag_search` 工具，基于培训主题搜索多个关键词，获取全面的文档内容。
-
-### 第四步：生成 HTML
-
-#### HTML 结构
-
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{培训主题}</title>
-  <link rel="stylesheet" href="./assets/base.css">
-  <link rel="stylesheet" href="./assets/fonts.css">
-  <link rel="stylesheet" id="theme-link" href="./assets/themes/{theme}.css">
-  <link rel="stylesheet" href="./assets/animations/animations.css">
-</head>
-<body>
-<div class="deck">
-  <section class="slide is-active" id="slide-1">
-    <!-- 标题页内容 -->
-  </section>
-  <section class="slide" id="slide-2">
-    <!-- 内容页 -->
-  </section>
-  <!-- ... -->
-</div>
-  <script src="./assets/runtime.js"></script>
-</body>
-</html>
-```
-
-#### 幻灯片规范
-
-- 每页一个 `<section class="slide">`，第一页加 `is-active`
-- 使用 `data-anim="fade-up"` 添加入场动画
-- 列表用 `class="anim-stagger-list"` 实现逐条显示
-- 使用 CSS token 变量（`var(--text-1)`, `var(--accent)`等），不写死颜色
-- 演讲者备注放在 `<div class="notes">` 内（默认隐藏，按 S 查看）
-
-#### 布局类型与内容限制
-
-| 幻灯片类型 | 最大内容量 | 推荐布局 |
-|-----------|-----------|---------|
-| 标题页 | 1个标题 + 1个副标题 | title-hero |
-| 内容页 | 1个标题 + 4-6个要点 | bullet-list, two-column |
-| 卡片页 | 1个标题 + 最多6个卡片(2x3) | card-grid, icon-grid |
-| 引用页 | 1段引用(最多3行) + 出处 | quote-centered |
-| 总结页 | 1个标题 + 3-5个要点 | summary, cta |
-
-**内容超出限制？拆分为多张幻灯片，绝不压缩。**
-
-如需查看完整布局模板，使用 `load_skill` 加载 `ppt` 技能的 `references/layouts.md`。
-如需查看动画效果，使用 `load_skill` 加载 `ppt` 技能的 `references/animations.md`。
-
-### 第五步：保存并产出（必须执行，否则任务未完成）
-
-**必须调用原子脚本保存 HTML，否则用户无法在产出面板看到结果。**
-
-```
-terminal(command="python3 ${SKILL_DIR}/scripts/save_and_output.py '<JSON_ARGS>'")
-```
-
-参数格式（JSON）：
-```json
-{
-  "workspace_id": "${WORKSPACE_ID}",
-  "content": "<生成的完整HTML>",
-  "filename": "<safe_topic>.html"
-}
-```
-
-脚本自动完成：
-1. 将 `./assets/` 的 CSS/JS 内联为独立 HTML
-2. 保存到 files 目录（`<base_dir>/<workspace_id>/outputs/`）
-3. 返回保存路径供确认
-
-**⚠️ 注意：HTML 内容直接写在命令参数中，不要先写到 /tmp！直接传递完整 HTML 给脚本！**
-
-### 第六步：告知用户
-
-保存成功后输出：
+**Content exceeds limits? Split into multiple slides. Never cram, never scroll.**
 
 ---
 
-✅ **PPT 已生成完毕！**
+## Phase 0: Detect Mode
 
-📊 **内容概览：**
-- 共 {N} 页幻灯片
-- 主题：{theme_name}
-- 第1页：标题页 — {培训主题}
-- 第2-N页：{简要列出各页核心主题}
+Determine what the user wants:
 
-⌨️ **快捷键：** ← → 翻页 | T 切换主题 | S 演讲者模式 | F 全屏 | O 总览
+- **Mode A: New Presentation** — Create from scratch. Go to Phase 1.
+- **Mode B: PPT Conversion** — Convert a .pptx file. Go to Phase 4.
+- **Mode C: Enhancement** — Improve an existing HTML presentation. Read it, understand it, enhance. **Follow Mode C modification rules below.**
 
-📥 请在**右侧产出面板**中查看和下载。
+### Mode C: Modification Rules
+
+When enhancing existing presentations, viewport fitting is the biggest risk:
+
+1. **Before adding content:** Count existing elements, check against density limits
+2. **Adding images:** Must have `max-height: min(50vh, 400px)`. If slide already has max content, split into two slides
+3. **Adding text:** Max 4-6 bullets per slide. Exceeds limits? Split into continuation slides
+4. **After ANY modification, verify:** `.slide` has `overflow: hidden`, new elements use `clamp()`, images have viewport-relative max-height, content fits at 1280x720
+5. **Proactively reorganize:** If modifications will cause overflow, automatically split content and inform the user. Don't wait to be asked
+
+**When adding images to existing slides:** Move image to new slide or reduce other content first. Never add images without checking if existing content already fills the viewport.
 
 ---
 
-## 参考文档（按需加载）
+## Phase 1: Content Discovery (New Presentations)
 
-以下参考文档可通过 `load_skill(skill_name="ppt", reference_name="xxx")` 按需加载：
+**Ask ALL questions in a single AskUserQuestion call** so the user fills everything out at once:
 
-- `references/themes.md` — 36 种主题的详细说明和适用场景
-- `references/layouts.md` — 31 种布局模板的使用方法
-- `references/animations.md` — 27 CSS + 20 Canvas FX 动画目录
-- `references/full-decks.md` — 完整 deck 视觉方向与场景建议
-- `references/presenter-mode.md` — 演讲者模式 + 逐字稿编写指南
-- `references/authoring-guide.md` — 完整创作工作流
+**Question 1 — Purpose** (header: "Purpose"):
+What is this presentation for? Options: Pitch deck / Teaching-Tutorial / Conference talk / Internal presentation
 
-## 键盘快捷键
+**Question 2 — Length** (header: "Length"):
+Approximately how many slides? Options: Short 5-10 / Medium 10-20 / Long 20+
+
+**Question 3 — Content** (header: "Content"):
+Do you have content ready? Options: All content ready / Rough notes / Topic only
+
+**Question 4 — Inline Editing** (header: "Editing"):
+Do you need to edit text directly in the browser after generation? Options:
+
+- "Yes (Recommended)" — Can edit text in-browser, auto-save to localStorage, export file
+- "No" — Presentation only, keeps file smaller
+
+**Remember the user's editing choice — it determines whether edit-related code is included in Phase 3.**
+
+If user has content, ask them to share it.
+
+### Step 1.2: Image Evaluation (if images provided)
+
+If user selected "No images" → skip to Phase 2.
+
+If user provides an image folder:
+
+1. **Scan** — List all image files (.png, .jpg, .svg, .webp, etc.)
+2. **View each image** — Use the Read tool (Claude is multimodal)
+3. **Evaluate** — For each: what it shows, USABLE or NOT USABLE (with reason), what concept it represents, dominant colors
+4. **Co-design the outline** — Curated images inform slide structure alongside text. This is NOT "plan slides then add images" — design around both from the start (e.g., 3 screenshots → 3 feature slides, 1 logo → title/closing slide)
+5. **Confirm via AskUserQuestion** (header: "Outline"): "Does this slide outline and image selection look right?" Options: Looks good / Adjust images / Adjust outline
+
+**Logo in previews:** If a usable logo was identified, embed it (base64) into each style preview in Phase 2 — the user sees their brand styled three different ways.
+
+---
+
+## Phase 2: Style Discovery
+
+**This is the "show, don't tell" phase.** Most people can't articulate design preferences in words.
+
+### Step 2.0: Style Path
+
+Ask how they want to choose (header: "Style"):
+
+- "Show me options" (recommended) — Generate 3 previews based on mood
+- "I know what I want" — Pick from preset list directly
+
+**If direct selection:** Show preset picker and skip to Phase 3. Available presets are defined in [STYLE_PRESETS.md](STYLE_PRESETS.md).
+
+### Step 2.1: Mood Selection (Guided Discovery)
+
+Ask (header: "Vibe", multiSelect: true, max 2):
+What feeling should the audience have? Options:
+
+- Impressed/Confident — Professional, trustworthy
+- Excited/Energized — Innovative, bold
+- Calm/Focused — Clear, thoughtful
+- Inspired/Moved — Emotional, memorable
+
+### Step 2.2: Generate 3 Style Previews
+
+Based on mood, generate 3 distinct single-slide HTML previews showing typography, colors, animation, and overall aesthetic. Read [STYLE_PRESETS.md](STYLE_PRESETS.md) for available presets and their specifications.
+
+| Mood                | Suggested Presets                                  |
+| ------------------- | -------------------------------------------------- |
+| Impressed/Confident | Bold Signal, Electric Studio, Dark Botanical       |
+| Excited/Energized   | Creative Voltage, Neon Cyber, Split Pastel         |
+| Calm/Focused        | Notebook Tabs, Paper & Ink, Swiss Modern           |
+| Inspired/Moved      | Dark Botanical, Vintage Editorial, Pastel Geometry |
+
+Save previews to `.claude-design/slide-previews/` (style-a.html, style-b.html, style-c.html). Each should be self-contained, ~50-100 lines, showing one animated title slide.
+
+Open each preview automatically for the user.
+
+### Step 2.3: User Picks
+
+Ask (header: "Style"):
+Which style preview do you prefer? Options: Style A: [Name] / Style B: [Name] / Style C: [Name] / Mix elements
+
+If "Mix elements", ask for specifics.
+
+---
+
+## Phase 3: Generate Presentation
+
+Generate the full presentation using content from Phase 1 (text, or text + curated images) and style from Phase 2.
+
+If images were provided, the slide outline already incorporates them from Step 1.2. If not, CSS-generated visuals (gradients, shapes, patterns) provide visual interest — this is a fully supported first-class path.
+
+**Before generating, read these supporting files:**
+
+- [html-template.md](references/html-template.md) — HTML architecture and JS features
+- [viewport-base.css](assets/viewport-base.css) — Mandatory CSS (include in full)
+- [animation-patterns.md](references/animation-patterns.md) — Animation reference for the chosen feeling
+
+**Key requirements:**
+
+- Single self-contained HTML file, all CSS/JS inline
+- Include the FULL contents of viewport-base.css in the `<style>` block
+- Use fonts from Fontshare or Google Fonts — never system fonts
+- Add detailed comments explaining each section
+- Every section needs a clear `/* === SECTION NAME === */` comment block
+
+---
+
+## Phase 4: PPT Conversion
+
+When converting PowerPoint files:
+
+1. **Extract content** — Run `python scripts/extract-pptx.py <input.pptx> <output_dir>` (install python-pptx if needed: `pip install python-pptx`)
+2. **Confirm with user** — Present extracted slide titles, content summaries, and image counts
+3. **Style selection** — Proceed to Phase 2 for style discovery
+4. **Generate HTML** — Convert to chosen style, preserving all text, images (from assets/), slide order, and speaker notes (as HTML comments)
+
+---
+
+## Phase 5: Delivery
+
+### Step 5.1: Save Output
+
+**You MUST call `save_output` to deliver the presentation.** This is the only way the user can access the result in their output panel.
 
 ```
-← → Space        翻页
-T                 切换主题
-S                 演讲者模式
-F                 全屏
-O                 幻灯片总览
-A                 切换动画
-N                 笔记抽屉
+save_output(
+  type="ppt",
+  title="<presentation title>",
+  content="<full self-contained HTML>",
+  filename="<safe-filename>.html"
+)
 ```
 
-## 严格禁止
+The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal commands or scripts to save — `save_output` is the only delivery mechanism.
 
-- 禁止在对话中输出原始 HTML 代码
-- 禁止暴露服务端操作细节、错误信息、文件路径
-- 禁止使用技术术语（如「内联CSS/JS」「静态挂载」等）
-- 禁止在末尾添加引导性建议
-- 保存失败只说「保存遇到问题，请稍后重试」
+### Step 5.2: Confirm to User
+
+1. **Clean up** — Delete `.claude-design/slide-previews/` if it exists
+2. **Summarize** — Tell the user:
+   - File location, style name, slide count
+   - Navigation: Arrow keys, Space, scroll/swipe, click nav dots
+   - How to customize: `:root` CSS variables for colors, font link for typography, `.reveal` class for animations
+   - If inline editing was enabled: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
+
+---
+
+## Phase 6: Share & Export (Optional)
+
+After delivery, **ask the user:** _"Would you like to share this presentation? I can deploy it to a live URL (works on any device including phones) or export it as a PDF."_
+
+Options:
+
+- **Deploy to URL** — Shareable link that works on any device
+- **Export to PDF** — Universal file for email, Slack, print
+- **Both**
+- **No thanks**
+
+If the user declines, stop here. If they choose one or both, proceed below.
+
+### 6A: Deploy to a Live URL (Vercel)
+
+This deploys the presentation to Vercel — a free hosting platform. The link works on any device (phones, tablets, laptops) and stays live until the user takes it down.
+
+**If the user has never deployed before, guide them step by step:**
+
+1. **Check if Vercel CLI is installed** — Run `npx vercel --version`. If not found, install Node.js first (`brew install node` on macOS, or download from https://nodejs.org).
+
+2. **Check if user is logged in** — Run `npx vercel whoami`.
+   - If NOT logged in, explain: _"Vercel is a free hosting service. You need an account to deploy. Let me walk you through it:"_
+     - Step 1: Ask user to go to https://vercel.com/signup in their browser
+     - Step 2: They can sign up with GitHub, Google, email — whatever is easiest
+     - Step 3: Once signed up, run `vercel login` and follow the prompts (it opens a browser window to authorize)
+     - Step 4: Confirm login with `vercel whoami`
+   - Wait for the user to confirm they're logged in before proceeding.
+
+3. **Deploy** — Run the deploy script:
+
+   ```bash
+   bash scripts/deploy.sh <path-to-presentation>
+   ```
+
+   The script accepts either a folder (with index.html) or a single HTML file.
+
+4. **Share the URL** — Tell the user:
+   - The live URL (from the script output)
+   - That it works on any device — they can text it, Slack it, email it
+   - To take it down later: visit https://vercel.com/dashboard and delete the project
+   - The Vercel free tier is generous — they won't be charged
+
+**⚠ Deployment gotchas:**
+
+- **Local images/videos must travel with the HTML.** The deploy script auto-detects files referenced via `src="..."` in the HTML and bundles them. But if the presentation references files via CSS `background-image` or unusual paths, those may be missed. **Before deploying, verify:** open the deployed URL and check that all images load. If any are broken, the safest fix is to put the HTML and all its assets into a single folder and deploy the folder instead of a standalone HTML file.
+- **Prefer folder deployments when the presentation has many assets.** If the presentation lives in a folder with images alongside it (e.g., `my-deck/index.html` + `my-deck/logo.png`), deploy the folder directly: `bash scripts/deploy.sh ./my-deck/`. This is more reliable than deploying a single HTML file because the entire folder contents are uploaded as-is.
+- **Filenames with spaces work but can cause issues.** The script handles spaces in filenames, but Vercel URLs encode spaces as `%20`. If possible, avoid spaces in image filenames. If the user's images have spaces, the script handles it — but if images still break, renaming files to use hyphens instead of spaces is the fix.
+- **Redeploying updates the same URL.** Running the deploy script again on the same presentation overwrites the previous deployment. The URL stays the same — no need to share a new link.
+
+### 6B: Export to PDF
+
+This captures each slide as a screenshot and combines them into a PDF. Perfect for email attachments, embedding in documents, or printing.
+
+**Note:** Animations and interactivity are not preserved — the PDF is a static snapshot. This is normal and expected; mention it to the user so they're not surprised.
+
+1. **Run the export script:**
+
+   ```bash
+   bash scripts/export-pdf.sh <path-to-html> [output.pdf]
+   ```
+
+   If no output path is given, the PDF is saved next to the HTML file.
+
+2. **What happens behind the scenes** (explain briefly to the user):
+   - A headless browser opens the presentation at 1920×1080 (standard widescreen)
+   - It screenshots each slide one by one
+   - All screenshots are combined into a single PDF
+   - The script needs Playwright (a browser automation tool) — it will install automatically if missing
+
+3. **If Playwright installation fails:**
+   - The most common issue is Chromium not downloading. Run: `npx playwright install chromium`
+   - If that fails too, it may be a network/firewall issue. Ask the user to try on a different network.
+
+4. **Deliver the PDF** — The script auto-opens it. Tell the user:
+   - The file location and size
+   - That it works everywhere — email, Slack, Notion, Google Docs, print
+   - Animations are replaced by their final visual state (still looks great, just static)
+
+**⚠ PDF export gotchas:**
+
+- **First run is slow.** The script installs Playwright and downloads a Chromium browser (~150MB) into a temp directory. This happens once per run. Warn the user it may take 30-60 seconds the first time — subsequent exports within the same session are faster.
+- **Slides must use `class="slide"`.** The export script finds slides by querying `.slide` elements. If the presentation uses a different class name, the script will report "0 slides found" and fail. All presentations generated by this skill use `.slide`, so this only matters for externally-created HTML.
+- **Local images must be loadable via HTTP.** The script starts a local server and loads the HTML through it (so Google Fonts and relative image paths work). If images use absolute filesystem paths (e.g., `src="/Users/name/photo.png"`) instead of relative paths (e.g., `src="photo.png"`), they won't load. Generated presentations always use relative paths, but converted or user-provided decks might not — check and fix if needed.
+- **Local images appear in the PDF** as long as they are in the same directory as (or relative to) the HTML file. The export script serves the HTML's parent directory over HTTP, so relative paths like `src="photo.png"` resolve correctly — including filenames with spaces. If images still don't appear, check: (1) the image files actually exist at the referenced path, (2) the paths are relative, not absolute filesystem paths like `/Users/name/photo.png`.
+- **Large presentations produce large PDFs.** Each slide is captured as a full 1920×1080 PNG screenshot. An 18-slide deck can produce a ~20MB PDF. If the PDF exceeds 10MB, ask the user: _"The PDF is [size]. Would you like me to compress it? It'll look slightly less sharp but the file will be much smaller."_ If yes, re-run the export with the `--compact` flag:
+  ```bash
+  bash scripts/export-pdf.sh <path-to-html> [output.pdf] --compact
+  ```
+  This renders at 1280×720 instead of 1920×1080, typically cutting file size by 50-70% with minimal visual difference.
+
+---
+
+## Supporting Files
+
+| File                                               | Purpose                                                              | When to Read              |
+| -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
+| [STYLE_PRESETS.md](references/STYLE_PRESETS.md)               | 12 curated visual presets with colors, fonts, and signature elements | Phase 2 (style selection) |
+| [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3 (generation)      |
+| [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3 (generation)      |
+| [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3 (generation)      |
+| [scripts/extract-pptx.py](scripts/extract-pptx.py) | Python script for PPT content extraction                             | Phase 4 (conversion)      |
+| [scripts/deploy.sh](scripts/deploy.sh)             | Deploy slides to Vercel for instant sharing                          | Phase 6 (sharing)         |
+| [scripts/export-pdf.sh](scripts/export-pdf.sh)     | Export slides to PDF                                                 | Phase 6 (sharing)         |

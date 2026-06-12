@@ -158,6 +158,12 @@ class DocService:
         if doc:
             if doc.get("storage_path"):
                 self.file_store.delete(doc["storage_path"])
+                # Delete the parsed markdown file generated during processing
+                md_path = (
+                    Path(doc["storage_path"]).parent
+                    / (Path(doc["filename"]).stem + ".md")
+                )
+                self.file_store.delete(str(md_path))
             self.vector_store.delete_by_doc_id(workspace_id, doc_id)
             await self.db.delete_document(doc_id, workspace_id)
 

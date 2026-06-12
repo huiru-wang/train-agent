@@ -37,16 +37,15 @@ def create_load_skill_tool(skill_manager: SkillManager):
         skill_name: str,
         file_paths: Annotated[
             list[str],
-            "要加载的文件路径列表，最多5 个，如 [\"references/themes.md\"]"
+            "要加载的文件路径列表，最多5 个，如 [\"references/docs.md\", \"scripts/save_and_output.py\", \"assets/theme.css\"]"
         ] = [],
     ) -> str:
         """加载技能提示或技能内的文件。
 
         Args:
             skill_name: 技能名称。
-            file_paths: 要加载的文件路径列表，最多5 个。如为空，返回技能主内容。
+            file_paths: 要加载的技能引用、资源、脚本等文件路径列表，最多5个。必需给出技能的相对路径，如 "references/docs.md"，如果是在技能根目录，则为"docs.md"。
         """
-        # Validate file_paths count
         if len(file_paths) > 5:
             return json.dumps({
                 "success": False,

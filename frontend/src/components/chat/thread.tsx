@@ -246,10 +246,7 @@ function MessageList({ messages }: { messages: any[] }) {
 // ============================================================
 
 function AITurnBubble({ turn }: { turn: AITurn }) {
-  // Exclude clarify_form tool messages — form UI is handled by InterruptBlock.
-  const effectiveToolMessages = turn.toolMessages.filter(
-    (msg) => msg.name !== "clarify_form",
-  );
+  const effectiveToolMessages = turn.toolMessages;
 
   // Collect all tool calls and text from all AI messages in this turn
   const allToolCallsRaw: ExtractedToolCall[] = [];
@@ -290,8 +287,7 @@ function AITurnBubble({ turn }: { turn: AITurn }) {
     return true;
   });
 
-  // Filter out clarify_form tool calls (rendered by InterruptBlock)
-  const visibleToolCalls = allToolCalls.filter((tc) => tc.name !== "clarify_form");
+  const visibleToolCalls = allToolCalls;
 
   // Match tool results to tool calls.
   // Strategy: try by tool_call_id first; if all IDs are empty, fall back
@@ -548,9 +544,90 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
   },
   clarify_form: {
     label: () => "信息收集",
-    expandable: false,
+    expandable: true,
   },
 };
+
+function ClarifyFormSummary({
+  toolCall,
+  result,
+}: {
+  toolCall: ExtractedToolCall;
+  result: any;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const title = (toolCall.args as Record<string, unknown>)?.title as string || "信息收集";
+  const fields = (toolCall.args as Record<string, unknown>)?.fields as Array<{
+    name: string;
+    label: string;
+  }> | undefined;
+
+  const resultText = extractToolResultText(result);
+  let userValues: Record<string, unknown> = {};
+  try {
+    userValues = JSON.parse(resultText);
+  } catch {
+    // Fallback: try parsing legacy Python dict format
+    const dictMatch = resultText.match(/用户填写的表单结果:\s*(\{.*\})/s);
+    if (dictMatch) {
+      try {
+        const jsonStr = dictMatch[1]
+          .replace(/'/g, '"')
+          .replace(/True/g, "true")
+          .replace(/False/g, "false")
+          .replace(/None/g, "null");
+        userValues = JSON.parse(jsonStr);
+      } catch { /* use empty */ }
+    }
+  }
+
+  const entries = fields
+    ? fields
+        .map((field) => ({
+          label: field.label,
+          value: userValues[field.name],
+        }))
+        .filter((entry) => entry.value !== undefined && entry.value !== "")
+    : Object.entries(userValues).map(([key, value]) => ({
+        label: key,
+        value,
+      }));
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground not-prose">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left cursor-pointer hover:bg-muted/40"
+      >
+        <span className="text-green-400">✓</span>
+        <span className="shrink-0 font-medium">信息收集</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground/80">
+          {title}
+        </span>
+        <ChevronDown
+          size={13}
+          className={`ml-auto shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
+        />
+      </button>
+      {expanded && (
+        <div className="border-t border-border/40 px-3 py-2 space-y-1.5">
+          {entries.map(({ label, value }) => (
+            <div key={label} className="flex items-start gap-2">
+              <span className="shrink-0 text-muted-foreground/70 min-w-[5rem]">
+                {label}:
+              </span>
+              <span className="text-foreground/90">
+                {Array.isArray(value) ? value.join("、") : String(value)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ToolCallCard({
   toolCall,
@@ -563,8 +640,11 @@ function ToolCallCard({
   const isDone = !!result;
   const [expanded, setExpanded] = useState(false);
 
-  // clarify_form 的真正 UI 由 interrupt 渲染，这里不显示
-  if (name === "clarify_form") return null;
+  // clarify_form: 未完成时由 InterruptBlock 渲染交互式表单；已完成时显示只读摘要
+  if (name === "clarify_form") {
+    if (!isDone) return null;
+    return <ClarifyFormSummary toolCall={toolCall} result={result} />;
+  }
 
   const context: ToolDisplayContext = { toolCall, result, isDone };
   const config = TOOL_DISPLAY_CONFIG[name] ?? DEFAULT_TOOL_DISPLAY;
@@ -625,10 +705,16 @@ function ToolCallCard({
 // ============================================================
 
 function InterruptBlock() {
-  const { interrupt } = useStreamContext();
+  const { interrupt, messages } = useStreamContext();
   const onResume = useResume();
 
   if (!interrupt || interrupt.value === undefined) return null;
+
+  // Skip if this interrupt was already resumed (tool result exists in history)
+  const hasResumed = messages.some(
+    (msg: any) => msg.type === "tool" && msg.name === "clarify_form",
+  );
+  if (hasResumed) return null;
 
   const interruptValue = interrupt.value as Record<string, unknown>;
 
