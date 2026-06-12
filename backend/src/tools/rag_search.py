@@ -39,13 +39,22 @@ def _format_location(result: dict) -> str:
 
 def create_rag_search_tool(vector_store: VectorStore):
     @tool
-    def rag_search(runtime: ToolRuntime[TrainAgentState], query: str, top_k: int = 5) -> str:
-        """从当前工作区的知识库中检索相关文档片段。当用户提出与文档内容相关的问题时使用。"""
+    def rag_search(runtime: ToolRuntime[TrainAgentState], query: str, top_k: int = 5, doc_id: str = "") -> str:
+        """从当前工作区的知识库中检索相关文档片段。当用户提出与文档内容相关的问题时使用。
+
+        当用户明确指定了某篇文档时，使用 doc_id 参数限定检索范围，只在该文档内检索。
+        文档的 doc_id 可在系统提示的「当前知识库文档摘要」中找到。
+        不传 doc_id 则在当前工作区所有文档中检索。
+        """
         workspace_id = runtime.state.get("workspace_id", "default")
-        logger.info("[Tool:rag_search] query='%s', top_k=%d, workspace=%s", query[:80], top_k, workspace_id)
+        effective_doc_id = doc_id.strip() or None
+        logger.info(
+            "[Tool:rag_search] query='%s', top_k=%d, doc_id=%s, workspace=%s",
+            query[:80], top_k, effective_doc_id, workspace_id,
+        )
         try:
             results = vector_store.search(
-                workspace_id=workspace_id, query=query, top_k=top_k
+                workspace_id=workspace_id, query=query, top_k=top_k, doc_id=effective_doc_id
             )
         except Exception as exc:
             logger.error("[Tool:rag_search] search failed: %s", exc, exc_info=True)

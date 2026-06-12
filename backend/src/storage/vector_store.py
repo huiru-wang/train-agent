@@ -13,21 +13,31 @@ logger = logging.getLogger(__name__)
 class DashscopeEmbeddingFunction(EmbeddingFunction):
     """ChromaDB embedding function using Dashscope text-embedding-v2."""
 
-    def __init__(self, model: str = None):
-        self.model = model or os.getenv("EMBEDDING_MODEL", "text-embedding-v2")
+    def __init__(self):
+        pass
 
     def __call__(self, input: Documents) -> Embeddings:
-        logger.info("[Embedding] calling Dashscope model=%s, %d texts", self.model, len(input))
+        logger.info(
+            "[Embedding] calling Dashscope model=%s, %d texts", self.model, len(input)
+        )
         response = dashscope.TextEmbedding.call(
-            model=self.model,
+            model=os.getenv("EMBEDDING_MODEL", "text-embedding-v2"),
+            api_key=os.getenv("EMBEDDING_API_KEY"),
+            base_url=os.getenv("EMBEDDING_API_BASE"),
             input=input,
-            api_key=os.getenv("DASHSCOPE_API_KEY"),
         )
         if response.status_code != 200:
-            logger.error("[Embedding] Dashscope error: status=%s, message=%s",
-                         response.status_code, getattr(response, 'message', 'unknown'))
-            raise RuntimeError(f"Dashscope embedding failed: {response.status_code} {getattr(response, 'message', '')}")
-        logger.info("[Embedding] success, got %d embeddings", len(response.output["embeddings"]))
+            logger.error(
+                "[Embedding] Dashscope error: status=%s, message=%s",
+                response.status_code,
+                getattr(response, "message", "unknown"),
+            )
+            raise RuntimeError(
+                f"Dashscope embedding failed: {response.status_code} {getattr(response, 'message', '')}"
+            )
+        logger.info(
+            "[Embedding] success, got %d embeddings", len(response.output["embeddings"])
+        )
         return [item["embedding"] for item in response.output["embeddings"]]
 
 
@@ -50,22 +60,36 @@ class VectorStore:
         )
 
     def add_chunks(
-        self, workspace_id: str, doc_id: str, chunks: list[str],
-        filename: str = "", batch_size: int = 20,
+        self,
+        workspace_id: str,
+        doc_id: str,
+        chunks: list[str],
+        filename: str = "",
+        batch_size: int = 20,
     ):
         """Legacy: add plain text chunks (kept for backward compatibility)."""
-        logger.info("[VectorStore] add_chunks: workspace=%s, doc=%s, filename=%s, %d chunks (batch_size=%d)",
-                     workspace_id, doc_id, filename, len(chunks), batch_size)
+        logger.info(
+            "[VectorStore] add_chunks: workspace=%s, doc=%s, filename=%s, %d chunks (batch_size=%d)",
+            workspace_id,
+            doc_id,
+            filename,
+            len(chunks),
+            batch_size,
+        )
         collection = self._get_collection(workspace_id)
         for start in range(0, len(chunks), batch_size):
-            batch = chunks[start:start + batch_size]
+            batch = chunks[start : start + batch_size]
             batch_ids = [str(uuid.uuid4()) for _ in batch]
             batch_metas = [
                 {"doc_id": doc_id, "filename": filename, "chunk_index": start + j}
                 for j in range(len(batch))
             ]
-            logger.info("[VectorStore] adding batch %d-%d / %d",
-                         start + 1, start + len(batch), len(chunks))
+            logger.info(
+                "[VectorStore] adding batch %d-%d / %d",
+                start + 1,
+                start + len(batch),
+                len(chunks),
+            )
             collection.add(documents=batch, ids=batch_ids, metadatas=batch_metas)
         logger.info("[VectorStore] add_chunks done")
 
@@ -82,17 +106,22 @@ class VectorStore:
 
         logger.info(
             "[VectorStore] add_structured_chunks: workspace=%s, doc=%s, filename=%s, %d chunks",
-            workspace_id, doc_id, filename, len(chunks),
+            workspace_id,
+            doc_id,
+            filename,
+            len(chunks),
         )
         collection = self._get_collection(workspace_id)
         for start in range(0, len(chunks), batch_size):
-            batch: list[ChunkWithMetadata] = chunks[start:start + batch_size]
+            batch: list[ChunkWithMetadata] = chunks[start : start + batch_size]
             batch_ids = [str(uuid.uuid4()) for _ in batch]
             batch_docs = [chunk.text for chunk in batch]
             batch_metas = [chunk.to_metadata(doc_id, filename) for chunk in batch]
             logger.info(
                 "[VectorStore] adding batch %d-%d / %d",
-                start + 1, start + len(batch), len(chunks),
+                start + 1,
+                start + len(batch),
+                len(chunks),
             )
             collection.add(documents=batch_docs, ids=batch_ids, metadatas=batch_metas)
         logger.info("[VectorStore] add_structured_chunks done")
@@ -104,17 +133,22 @@ class VectorStore:
         top_k: int = 5,
         doc_id: str | None = None,
     ) -> list[dict]:
-        logger.info("[VectorStore] search: workspace=%s, query='%s', top_k=%d, doc_id=%s",
-                     workspace_id, query[:80], top_k, doc_id)
+        logger.info(
+            "[VectorStore] search: workspace=%s, query='%s', top_k=%d, doc_id=%s",
+            workspace_id,
+            query[:80],
+            top_k,
+            doc_id,
+        )
         try:
             collection = self._get_existing_collection(workspace_id)
         except NotFoundError:
-            logger.info("[VectorStore] collection not found for workspace=%s", workspace_id)
+            logger.info(
+                "[VectorStore] collection not found for workspace=%s", workspace_id
+            )
             return []
         where = {"doc_id": doc_id} if doc_id else None
-        results = collection.query(
-            query_texts=[query], n_results=top_k, where=where
-        )
+        results = collection.query(query_texts=[query], n_results=top_k, where=where)
         output = []
         for i, doc_text in enumerate(results["documents"][0]):
             meta = results["metadatas"][0][i]
@@ -130,9 +164,7 @@ class VectorStore:
                     "page_end": meta.get("page_end", 0),
                     "section_level": meta.get("section_level", 0),
                     "distance": (
-                        results["distances"][0][i]
-                        if results.get("distances")
-                        else None
+                        results["distances"][0][i] if results.get("distances") else None
                     ),
                 }
             )

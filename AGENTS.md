@@ -117,3 +117,7 @@ pnpm build && pnpm start                                    # 生产构建
   ```
 - `${SKILL_DIR}` placeholder in SKILL.md is replaced with the actual skill directory path at load time.
 - The `SkillManager` prevents directory traversal — all file paths must resolve within the skill directory.
+
+## 问题定位指南
+
+详见 [`docs/debug-guides.md`](docs/debug-guides.md)。

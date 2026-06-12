@@ -67,6 +67,16 @@ echo $! > "$LOGS/langgraph.pid"
 # --- Start Frontend ---
 log "启动前端 (port 3000, runner: $FRONTEND_RUNNER)..."
 cd "$FRONTEND"
+# pnpm 10+ 需要 Node.js v22+。若 nvm 可用则先切换，避免 ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING。
+if [ -f "$HOME/.nvm/nvm.sh" ]; then
+  export NVM_DIR="$HOME/.nvm"
+  # shellcheck source=/dev/null
+  source "$NVM_DIR/nvm.sh" --no-use
+  if nvm ls v22 >/dev/null 2>&1; then
+    nvm use v22 >/dev/null 2>&1 || true
+    log "已切换至 Node.js $(node --version) 以兼容 pnpm"
+  fi
+fi
 nohup "$FRONTEND_RUNNER" run dev > "$LOGS/frontend.log" 2>&1 &
 echo $! > "$LOGS/frontend.pid"
 

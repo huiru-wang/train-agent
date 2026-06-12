@@ -245,36 +245,31 @@ function MessageList({ messages }: { messages: any[] }) {
 // AI turn bubble (merges consecutive AI+tool messages into one bubble)
 // ============================================================
 
+// Render item types for ordered interleaved display
+type RenderItem =
+  | { kind: "reasoning"; key: string; text: string }
+  | { kind: "text"; key: string; text: string }
+  | { kind: "toolcall"; key: string; tc: ExtractedToolCall; result: any };
+
 function AITurnBubble({ turn }: { turn: AITurn }) {
   const effectiveToolMessages = turn.toolMessages;
 
-  // Collect all tool calls and text from all AI messages in this turn
+  // --- Step 1: Collect all tool calls to build the result map ---
+  // We need to know all tool call IDs up front to match results.
   const allToolCallsRaw: ExtractedToolCall[] = [];
-  const allTextParts: string[] = [];
-  const allReasoning: string[] = [];
-
   for (const aiMsg of turn.aiMessages) {
-    const toolCalls = extractToolCalls(aiMsg);
-    allToolCallsRaw.push(...toolCalls);
-
-    const text = extractTextContent(aiMsg.content);
-    if (text.trim()) allTextParts.push(text);
-
-    const reasoning = aiMsg.additional_kwargs?.reasoning_content;
-    if (reasoning) allReasoning.push(reasoning);
+    allToolCallsRaw.push(...extractToolCalls(aiMsg));
   }
 
-  // Deduplicate tool calls. Refreshed history can contain the same tool call
-  // twice: once in top-level tool_calls with a real id and once in content
-  // with id: "". Keep the real-id call so tool_call_id result matching works.
+  // Deduplicate: history can contain the same tool call twice (top-level
+  // tool_calls with a real id + content array with id: ""). Keep the real-id
+  // version so tool_call_id result matching works correctly.
   const realIdFingerprints = new Set(
-    allToolCallsRaw
-      .filter((tc) => tc.id)
-      .map((tc) => toolCallFingerprint(tc)),
+    allToolCallsRaw.filter((tc) => tc.id).map((tc) => toolCallFingerprint(tc)),
   );
   const seenIds = new Set<string>();
   const seenFallbackFingerprints = new Set<string>();
-  const allToolCalls = allToolCallsRaw.filter((tc) => {
+  const deduplicatedToolCalls = allToolCallsRaw.filter((tc) => {
     const fingerprint = toolCallFingerprint(tc);
     if (tc.id) {
       if (seenIds.has(tc.id)) return false;
@@ -287,58 +282,144 @@ function AITurnBubble({ turn }: { turn: AITurn }) {
     return true;
   });
 
-  const visibleToolCalls = allToolCalls;
-
-  // Match tool results to tool calls.
-  // Strategy: try by tool_call_id first; if all IDs are empty, fall back
-  // to positional matching (tool calls and tool messages in order).
+  // --- Step 2: Build tool result map ---
   const toolResultMap = new Map<string, any>();
-  const hasRealIds = visibleToolCalls.some((tc) => tc.id && tc.id.length > 0);
+  const hasRealIds = deduplicatedToolCalls.some((tc) => tc.id && tc.id.length > 0);
 
   if (hasRealIds) {
-    // ID-based matching
     for (const toolMsg of effectiveToolMessages) {
       const callId = toolMsg.tool_call_id;
       if (callId) toolResultMap.set(callId, toolMsg);
     }
   } else {
-    // Positional matching: pair tool calls with tool messages by order
-    for (let i = 0; i < visibleToolCalls.length; i++) {
-      if (i < effectiveToolMessages.length) {
-        toolResultMap.set(visibleToolCalls[i].id || `pos-${i}`, effectiveToolMessages[i]);
-      }
-    }
-    // Assign positional keys to tool calls that lack real ids
-    visibleToolCalls.forEach((tc, i) => {
+    // Positional matching when IDs are missing
+    deduplicatedToolCalls.forEach((tc, i) => {
       if (!tc.id) tc.id = `pos-${i}`;
+      if (i < effectiveToolMessages.length) {
+        toolResultMap.set(tc.id, effectiveToolMessages[i]);
+      }
     });
   }
 
-  const combinedText = allTextParts.join("\n\n");
-  const combinedReasoning = allReasoning.join("\n\n");
+  // Build a lookup by fingerprint for deduplication during ordered traversal
+  const dedupedByFingerprint = new Map<string, ExtractedToolCall>();
+  for (const tc of deduplicatedToolCalls) {
+    dedupedByFingerprint.set(toolCallFingerprint(tc), tc);
+  }
 
-  if (!combinedText && visibleToolCalls.length === 0 && !combinedReasoning) return null;
+  // --- Step 3: Build ordered render items by traversing each AI message's
+  // content array in sequence, preserving the model's actual output order.
+  // This correctly handles patterns like: tool → text → tool, text + tool, etc.
+  const renderItems: RenderItem[] = [];
+  const seenRenderIds = new Set<string>();
+  let textIndex = 0;
+  let allText = "";
+
+  for (const aiMsg of turn.aiMessages) {
+    // Reasoning (thinking blocks) always come first within a message
+    const reasoning = aiMsg.additional_kwargs?.reasoning_content as string | undefined;
+    if (reasoning) {
+      renderItems.push({ kind: "reasoning", key: `reasoning-${renderItems.length}`, text: reasoning });
+    }
+
+    if (Array.isArray(aiMsg.content)) {
+      // Traverse content parts in order to preserve interleaving
+      for (const part of aiMsg.content as Array<Record<string, unknown>>) {
+        if (part.type === "text" && typeof part.text === "string" && (part.text as string).trim()) {
+          const text = part.text as string;
+          const key = `text-${textIndex++}`;
+          renderItems.push({ kind: "text", key, text });
+          allText += (allText ? "\n\n" : "") + text;
+        } else if (part.type === "tool_call" || part.type === "tool_use") {
+          // Find the deduplicated version of this tool call (which has the correct id)
+          const partFingerprint = toolCallFingerprint({
+            id: getToolCallId(part.id as string),
+            name: (part.name as string) || "",
+            args: (part.args as Record<string, unknown>) ?? {},
+          });
+          const canonicalTc = dedupedByFingerprint.get(partFingerprint);
+          if (!canonicalTc) continue;
+
+          // Skip if already rendered (handles duplication between content and tool_calls)
+          const renderId = canonicalTc.id || partFingerprint;
+          if (seenRenderIds.has(renderId)) continue;
+          seenRenderIds.add(renderId);
+
+          renderItems.push({
+            kind: "toolcall",
+            key: `tc-${renderId}`,
+            tc: canonicalTc,
+            result: toolResultMap.get(canonicalTc.id || ""),
+          });
+        }
+      }
+    } else {
+      // Fallback: plain string content
+      const text = extractTextContent(aiMsg.content);
+      if (text.trim()) {
+        const key = `text-${textIndex++}`;
+        renderItems.push({ kind: "text", key, text });
+        allText += (allText ? "\n\n" : "") + text;
+      }
+      // Also emit any top-level tool_calls not already rendered via content array
+      for (const tc of extractToolCalls(aiMsg)) {
+        const renderId = tc.id || toolCallFingerprint(tc);
+        if (seenRenderIds.has(renderId)) continue;
+        seenRenderIds.add(renderId);
+        const canonical = dedupedByFingerprint.get(toolCallFingerprint(tc)) ?? tc;
+        renderItems.push({
+          kind: "toolcall",
+          key: `tc-${renderId}`,
+          tc: canonical,
+          result: toolResultMap.get(canonical.id || ""),
+        });
+      }
+    }
+  }
+
+  // Emit any tool calls from top-level tool_calls that weren't captured by
+  // the content-array traversal (e.g. streamed messages that only have tool_calls)
+  for (const tc of deduplicatedToolCalls) {
+    const renderId = tc.id || toolCallFingerprint(tc);
+    if (seenRenderIds.has(renderId)) continue;
+    seenRenderIds.add(renderId);
+    renderItems.push({
+      kind: "toolcall",
+      key: `tc-${renderId}`,
+      tc,
+      result: toolResultMap.get(tc.id || ""),
+    });
+  }
+
+  if (renderItems.length === 0) return null;
 
   return (
     <div className="group">
       <div className="min-w-0 space-y-2">
-        {combinedReasoning && <ReasoningBlock text={combinedReasoning} />}
+        {renderItems.map((item) => {
+          if (item.kind === "reasoning") {
+            return <ReasoningBlock key={item.key} text={item.text} />;
+          }
+          if (item.kind === "text") {
+            return (
+              <div key={item.key} className="prose prose-invert prose-sm max-w-none">
+                <MarkdownWithCitations text={item.text} />
+              </div>
+            );
+          }
+          if (item.kind === "toolcall") {
+            return (
+              <ToolCallCard
+                key={item.key}
+                toolCall={item.tc}
+                result={item.result}
+              />
+            );
+          }
+          return null;
+        })}
 
-        {visibleToolCalls.map((tc, idx) => (
-          <ToolCallCard
-            key={tc.id || `tc-${idx}`}
-            toolCall={tc}
-            result={toolResultMap.get(tc.id || `pos-${idx}`)}
-          />
-        ))}
-
-        {combinedText && (
-          <div className="prose prose-invert prose-sm max-w-none">
-            <MarkdownWithCitations text={combinedText} />
-          </div>
-        )}
-
-        {combinedText && <MessageActions content={combinedText} />}
+        {allText && <MessageActions content={allText} />}
       </div>
     </div>
   );
@@ -542,6 +623,23 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
       return <ToolTextBlock value={rawText} />;
     },
   },
+  save_output: {
+    label: () => "保存产出",
+    expandable: false,
+    summary: ({ toolCall }) => {
+      const filename = getToolArgString(toolCall.args, ["filename"]);
+      if (filename) return filename;
+
+      const title = getToolArgString(toolCall.args, ["title"]);
+      const type = getToolArgString(toolCall.args, ["type"]);
+      if (title) {
+        const extensionMap: Record<string, string> = { ppt: ".html", report: ".md" };
+        const safeTitle = title.replace(/ /g, "_").replace(/\//g, "_");
+        return `${safeTitle}${extensionMap[type] ?? ".txt"}`;
+      }
+      return "";
+    },
+  },
   clarify_form: {
     label: () => "信息收集",
     expandable: true,
@@ -580,6 +678,17 @@ function ClarifyFormSummary({
         userValues = JSON.parse(jsonStr);
       } catch { /* use empty */ }
     }
+  }
+
+  // User cancelled the form — show a compact cancelled badge
+  if (userValues.cancelled) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground not-prose">
+        <span className="text-yellow-400">✗</span>
+        <span className="shrink-0 font-medium">信息收集</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground/80">{title} — 已取消</span>
+      </div>
+    );
   }
 
   const entries = fields
@@ -707,8 +816,12 @@ function ToolCallCard({
 function InterruptBlock() {
   const { interrupt, messages } = useStreamContext();
   const onResume = useResume();
+  // 本地已提交标记：resume 发出后立即隐藏表单，不等 stream 消息更新。
+  // 防止重启后重复点击提交触发 "no pending protocol interrupt" 错误。
+  const [localSubmitted, setLocalSubmitted] = useState(false);
 
   if (!interrupt || interrupt.value === undefined) return null;
+  if (localSubmitted) return null;
 
   // Skip if this interrupt was already resumed (tool result exists in history)
   const hasResumed = messages.some(
@@ -717,6 +830,11 @@ function InterruptBlock() {
   if (hasResumed) return null;
 
   const interruptValue = interrupt.value as Record<string, unknown>;
+
+  const handleSubmit = (values: Record<string, string | string[]>) => {
+    setLocalSubmitted(true);
+    onResume(values);
+  };
 
   if (interruptValue.fields && Array.isArray(interruptValue.fields)) {
     const fields = (
@@ -736,7 +854,7 @@ function InterruptBlock() {
             title={(interruptValue.title as string) || "请填写信息"}
             description={(interruptValue.description as string) || ""}
             fields={fields}
-            onSubmit={onResume}
+            onSubmit={handleSubmit}
           />
         </div>
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Send, X } from "lucide-react";
 
 interface FormField {
   name: string;
@@ -26,11 +26,20 @@ export function ClarifyForm({
 }: ClarifyFormProps) {
   const [values, setValues] = useState<Record<string, string | string[]>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
 
   if (submitted) {
     return (
       <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
         <p className="text-xs text-muted-foreground">✓ 已提交表单: {title}</p>
+      </div>
+    );
+  }
+
+  if (cancelled) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
+        <p className="text-xs text-muted-foreground">✗ 已取消: {title}</p>
       </div>
     );
   }
@@ -43,6 +52,11 @@ export function ClarifyForm({
     event.preventDefault();
     setSubmitted(true);
     onSubmit(values);
+  };
+
+  const handleCancel = () => {
+    setCancelled(true);
+    onSubmit({ __cancelled__: "true" });
   };
 
   const isValid = fields
@@ -68,14 +82,24 @@ export function ClarifyForm({
           />
         ))}
 
-        <button
-          type="submit"
-          disabled={!isValid}
-          className="mt-1 flex items-center justify-center gap-1.5 self-end rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-40"
-        >
-          <Send size={12} />
-          提交
-        </button>
+        <div className="mt-1 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="flex items-center justify-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <X size={12} />
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={!isValid}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90 disabled:opacity-40"
+          >
+            <Send size={12} />
+            提交
+          </button>
+        </div>
       </form>
     </div>
   );

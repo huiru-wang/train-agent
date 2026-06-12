@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 
 from src.parsers import PdfParser, DocxParser, MarkdownParser
-from src.parsers.base import DocumentSection, split_sections_into_chunks, ChunkWithMetadata
+from src.parsers.base import DocumentSection, split_sections_into_chunks
 from src.storage.database import Database
 from src.storage.file_store import FileStore
 from src.storage.vector_store import VectorStore
@@ -38,7 +38,10 @@ class DocService:
         file_type = self._detect_type(filename)
         logger.info(
             "[DocService] create_document_upload: filename=%s, type=%s, size=%d bytes, workspace=%s",
-            filename, file_type, len(content), workspace_id,
+            filename,
+            file_type,
+            len(content),
+            workspace_id,
         )
         storage_path = self.file_store.save(workspace_id, filename, content)
         logger.info("[DocService] file saved to: %s", storage_path)
@@ -63,9 +66,7 @@ class DocService:
 
         try:
             # --- Structured parsing ---
-            await self.db.update_document(
-                doc_id, status="parsing", error_message=None
-            )
+            await self.db.update_document(doc_id, status="parsing", error_message=None)
             content = Path(storage_path).read_bytes()
             sections = self._parse_structured(file_type, content, storage_path)
             logger.info("[DocService] parsed %d sections", len(sections))
@@ -84,9 +85,7 @@ class DocService:
 
             md_filename = Path(filename).stem + ".md"
             md_content = f"# {filename}\n\n{full_text}"
-            self.file_store.save(
-                workspace_id, md_filename, md_content.encode("utf-8")
-            )
+            self.file_store.save(workspace_id, md_filename, md_content.encode("utf-8"))
             await self.db.update_document(doc_id, status="parsed")
             logger.info(
                 "[DocService] parsed text saved as: %s/%s", workspace_id, md_filename
@@ -159,9 +158,8 @@ class DocService:
             if doc.get("storage_path"):
                 self.file_store.delete(doc["storage_path"])
                 # Delete the parsed markdown file generated during processing
-                md_path = (
-                    Path(doc["storage_path"]).parent
-                    / (Path(doc["filename"]).stem + ".md")
+                md_path = Path(doc["storage_path"]).parent / (
+                    Path(doc["filename"]).stem + ".md"
                 )
                 self.file_store.delete(str(md_path))
             self.vector_store.delete_by_doc_id(workspace_id, doc_id)
@@ -208,16 +206,12 @@ class DocService:
 
         try:
             messages = [
-                SystemMessage(
-                    content="用一段话总结以下文档的核心内容，200字以内："
-                ),
+                SystemMessage(content="用一段话总结以下文档的核心内容，200字以内："),
                 HumanMessage(content=text[:8000]),
             ]
             response = await self.llm.ainvoke(messages)
             return response.content
         except Exception as exc:
-            logger.warning(
-                "[DocService] LLM summary failed, using fallback: %s", exc
-            )
+            logger.warning("[DocService] LLM summary failed, using fallback: %s", exc)
             # 返回截断文本作为 fallback，不暴露 LLM 错误
             return text[:500] + "..." if len(text) > 500 else text

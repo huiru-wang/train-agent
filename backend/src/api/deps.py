@@ -20,15 +20,12 @@ vector_store = VectorStore(f"{DATA_DIR}/chroma")
 file_store = FileStore(f"{DATA_DIR}/files")
 
 llm = ChatOpenAI(
-    model=os.getenv("LLM_MODEL", "qwen-plus"),
-    api_key=os.getenv("DASHSCOPE_API_KEY"),
-    base_url=os.getenv(
-        "OPENAI_API_BASE",
-        "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    ),
+    model=os.getenv("SUMMARIZATION_MODEL"),
+    api_key=os.getenv("SUMMARIZATION_API_KEY"),
+    base_url=os.getenv("SUMMARIZATION_API_BASE"),
 )
 
-doc_service = DocService(db=db, vector_store=vector_store, file_store=file_store, llm=llm)
-skill_manager = SkillManager(
-    os.path.join(os.path.dirname(__file__), "../../skills")
+doc_service = DocService(
+    db=db, vector_store=vector_store, file_store=file_store, llm=llm
 )
+skill_manager = SkillManager(os.path.join(os.path.dirname(__file__), "../../skills"))

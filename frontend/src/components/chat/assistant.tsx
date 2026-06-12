@@ -128,7 +128,46 @@ export function Assistant({ workspaceId, children }: AssistantProps) {
   };
 
   const handleResume = (values: Record<string, string | string[]>) => {
-    streamRef.current.submit(null, { command: { resume: values } });
+    // useStream.submit 在无 active streaming session 时不抛异常，而是把错误写入
+    // stream.error state，try/catch 无法捕获，重启后必然失败。
+    // 直接调用 LangGraph REST API 创建 resume run，消费 SSE 流，
+    // 流结束后重置 threadId 强制 useStream 重新 hydrate 以拉取最新消息。
+    const currentThreadId = streamRef.current.threadId ?? threadId;
+    if (!currentThreadId) {
+      console.error("[handleResume] no threadId available, cannot resume");
+      return;
+    }
+
+    fetch(`${LANGGRAPH_API_URL}/threads/${currentThreadId}/runs/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        assistant_id: "train_agent",
+        command: { resume: values },
+        config: { recursion_limit: 30 },
+        stream_mode: ["messages-tuple", "updates"],
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          console.error("[handleResume] resume run failed:", res.status, res.statusText);
+          return;
+        }
+        // 消费 SSE 流直到结束，确保 run 完全执行完毕后再 hydrate
+        const reader = res.body?.getReader();
+        if (reader) {
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+        // 重置 threadId 触发 useStream 重新 hydrate，拉取最新 messages
+        setThreadId(null);
+        setTimeout(() => setThreadId(currentThreadId), 50);
+      })
+      .catch((err) => {
+        console.error("[handleResume] REST API request error:", err);
+      });
   };
 
   const handleStop = () => {
