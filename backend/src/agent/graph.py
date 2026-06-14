@@ -12,6 +12,7 @@ from src.middlewares import (
     log_after_model,
     log_before_agent,
     log_before_model,
+    sanitize_model_request,
 )
 from langchain.agents.middleware import SummarizationMiddleware
 from src.storage.database import Database
@@ -64,6 +65,7 @@ def create_graph(
         middleware=[
             log_before_agent,
             log_before_model,
+            sanitize_model_request,
             inject_doc_context,
             log_after_model,
             log_after_agent,

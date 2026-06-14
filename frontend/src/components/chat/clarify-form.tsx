@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Send, X } from "lucide-react";
+import { Check, ChevronDown, Send, X } from "lucide-react";
 
 interface FormField {
   name: string;
@@ -116,6 +116,7 @@ function FormFieldComponent({
   value,
   onChange,
 }: FormFieldComponentProps) {
+  const [isOpen, setIsOpen] = useState(false);
   const labelElement = (
     <label className="mb-1 block text-xs font-medium text-foreground/80">
       {field.label}
@@ -140,21 +141,53 @@ function FormFieldComponent({
   }
 
   if (field.type === "select") {
+    const selectedValue = (value as string) ?? "";
+    const options = field.options ?? [];
+
     return (
       <div>
         {labelElement}
-        <select
-          value={(value as string) ?? ""}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-xs text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+        <button
+          type="button"
+          onClick={() => setIsOpen((open) => !open)}
+          disabled={options.length === 0}
+          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-left text-xs text-foreground transition-colors hover:border-accent/50 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <option value="">请选择</option>
-          {field.options?.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+          <span className={selectedValue ? "" : "text-muted-foreground"}>
+            {selectedValue || "请选择"}
+          </span>
+          <ChevronDown
+            size={14}
+            className={`shrink-0 text-muted-foreground transition-transform ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+        {isOpen && (
+          <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-muted p-1">
+            {options.map((option) => {
+              const isSelected = selectedValue === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    onChange(option);
+                    setIsOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors ${
+                    isSelected
+                      ? "bg-accent/20 text-accent"
+                      : "text-foreground hover:bg-background/60"
+                  }`}
+                >
+                  <span>{option}</span>
+                  {isSelected && <Check size={12} className="shrink-0" />}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }

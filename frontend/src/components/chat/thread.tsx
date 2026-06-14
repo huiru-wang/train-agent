@@ -8,7 +8,6 @@ import remarkGfm from "remark-gfm";
 import {
   SendHorizontal,
   Square,
-  X,
   Bot,
   Brain,
   ChevronDown,
@@ -667,7 +666,7 @@ function ClarifyFormSummary({
     userValues = JSON.parse(resultText);
   } catch {
     // Fallback: try parsing legacy Python dict format
-    const dictMatch = resultText.match(/用户填写的表单结果:\s*(\{.*\})/s);
+    const dictMatch = resultText.match(/用户填写的表单结果:\s*(\{[\s\S]*\})/);
     if (dictMatch) {
       try {
         const jsonStr = dictMatch[1]
@@ -813,8 +812,42 @@ function ToolCallCard({
 // Interrupt block
 // ============================================================
 
+function normalizeFieldOptions(options: unknown): string[] | undefined {
+  if (Array.isArray(options)) {
+    const normalized = options
+      .map((option) => {
+        if (typeof option === "string") return option;
+        if (typeof option === "number" || typeof option === "boolean") {
+          return String(option);
+        }
+        if (typeof option === "object" && option !== null) {
+          const record = option as Record<string, unknown>;
+          const value = record.label ?? record.value ?? record.name ?? record.text;
+          if (typeof value === "string") return value;
+          if (typeof value === "number" || typeof value === "boolean") {
+            return String(value);
+          }
+        }
+        return "";
+      })
+      .map((option) => option.trim())
+      .filter(Boolean);
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  if (typeof options === "string") {
+    const normalized = options
+      .split(/[\n,，、]/)
+      .map((option) => option.trim())
+      .filter(Boolean);
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  return undefined;
+}
+
 function InterruptBlock() {
-  const { interrupt, messages } = useStreamContext();
+  const { interrupt } = useStreamContext();
   const onResume = useResume();
   // 本地已提交标记：resume 发出后立即隐藏表单，不等 stream 消息更新。
   // 防止重启后重复点击提交触发 "no pending protocol interrupt" 错误。
@@ -822,12 +855,6 @@ function InterruptBlock() {
 
   if (!interrupt || interrupt.value === undefined) return null;
   if (localSubmitted) return null;
-
-  // Skip if this interrupt was already resumed (tool result exists in history)
-  const hasResumed = messages.some(
-    (msg: any) => msg.type === "tool" && msg.name === "clarify_form",
-  );
-  if (hasResumed) return null;
 
   const interruptValue = interrupt.value as Record<string, unknown>;
 
@@ -843,7 +870,7 @@ function InterruptBlock() {
       name: (field.name as string) || "",
       label: (field.label as string) || "",
       type: (field.type as "text" | "select" | "multiselect") || "text",
-      options: field.options as string[] | undefined,
+      options: normalizeFieldOptions(field.options),
       required: field.required !== false,
     }));
 

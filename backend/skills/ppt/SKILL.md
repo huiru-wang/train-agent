@@ -10,7 +10,7 @@ Create zero-dependency, animation-rich HTML presentations that run entirely in t
 ## Core Principles
 
 1. **Zero Dependencies** — Single HTML files with inline CSS/JS. No npm, no build tools.
-2. **Show, Don't Tell** — Generate visual previews, not abstract choices. People discover what they want by seeing it.
+2. **Single-step choices** — Collect concrete choices up front, then generate the final deliverable directly. Do not create intermediate style preview files.
 3. **Distinctive Design** — No generic "AI slop." Every presentation must feel custom-crafted.
 4. **Viewport Fitting (NON-NEGOTIABLE)** — Every slide MUST fit exactly within 100vh. No scrolling within slides, ever. Content overflows? Split into multiple slides.
 
@@ -63,29 +63,7 @@ These invariants apply to EVERY slide in EVERY presentation:
 
 ---
 
-## Phase 0: Detect Mode
-
-Determine what the user wants:
-
-- **Mode A: New Presentation** — Create from scratch. Go to Phase 1.
-- **Mode B: PPT Conversion** — Convert a .pptx file. Go to Phase 4.
-- **Mode C: Enhancement** — Improve an existing HTML presentation. Read it, understand it, enhance. **Follow Mode C modification rules below.**
-
-### Mode C: Modification Rules
-
-When enhancing existing presentations, viewport fitting is the biggest risk:
-
-1. **Before adding content:** Count existing elements, check against density limits
-2. **Adding images:** Must have `max-height: min(50vh, 400px)`. If slide already has max content, split into two slides
-3. **Adding text:** Max 4-6 bullets per slide. Exceeds limits? Split into continuation slides
-4. **After ANY modification, verify:** `.slide` has `overflow: hidden`, new elements use `clamp()`, images have viewport-relative max-height, content fits at 1280x720
-5. **Proactively reorganize:** If modifications will cause overflow, automatically split content and inform the user. Don't wait to be asked
-
-**When adding images to existing slides:** Move image to new slide or reduce other content first. Never add images without checking if existing content already fills the viewport.
-
----
-
-## Phase 1: Content Discovery (New Presentations)
+## Phase 1: Content Discovery
 
 **Ask ALL questions in a single AskUserQuestion call** so the user fills everything out at once:
 
@@ -98,15 +76,51 @@ Approximately how many slides? Options: Short 5-10 / Medium 10-20 / Long 20+
 **Question 3 — Content** (header: "Content"):
 Do you have content ready? Options: All content ready / Rough notes / Topic only
 
-**Question 4 — Inline Editing** (header: "Editing"):
-Do you need to edit text directly in the browser after generation? Options:
+**Question 4 — Source Documents** (header: "Sources"):
+Before asking Phase 1 questions, inspect the knowledge-base document summaries injected in the system prompt.
 
-- "Yes (Recommended)" — Can edit text in-browser, auto-save to localStorage, export file
-- "No" — Presentation only, keeps file smaller
+If one or more documents are available, include a multiselect `source_documents` field:
 
-**Remember the user's editing choice — it determines whether edit-related code is included in Phase 3.**
+- List every available document by filename or clear title
+- Include "All documents (Recommended)" as the default/recommended option
+- Include "I will provide a topic or outline instead" as an escape hatch
+- If the user selects "All documents", use every available knowledge-base document
+- If the user selects specific documents, use only those documents as the generation scope
+- If the user selects both "All documents" and specific documents, treat "All documents" as authoritative
+- If the user selects "I will provide a topic or outline instead", require a concrete topic, outline, or source content before generating
 
-If user has content, ask them to share it.
+If no knowledge-base documents are available, do not show `source_documents`. Instead include a required text field:
+
+- name: `topic_or_outline`
+- label: "Topic / Outline"
+- description: "No knowledge-base documents are available. Provide the PPT topic, target content, or outline."
+
+Do not proceed with PPT generation when there are no documents and the user has not provided a concrete topic, outline, or source content.
+
+**Question 5 — Visual Style** (header: "Style"):
+Choose one visual style preset. Options:
+
+- Swiss Modern (Recommended) — Minimal, precise, ideal for technical training and structured explanations
+- Bold Signal — Dark, high-impact, strong emphasis
+- Electric Studio — Blue/white, professional, polished
+- Creative Voltage — Energetic, creative, product/innovation friendly
+- Dark Botanical — Elegant, premium, atmospheric
+- Notebook Tabs — Editorial paper/tabs, organized course feel
+- Pastel Geometry — Soft, modern, approachable
+- Split Pastel — Playful, friendly, beginner-friendly
+- Vintage Editorial — Opinionated editorial, distinctive personality
+- Neon Cyber — Futuristic, tech-forward, AI/cyber feel
+- Terminal Green — Engineering, code-heavy, terminal-inspired
+- Paper & Ink — Thoughtful paper texture, deep explanation
+
+If the user does not choose a style, default to Swiss Modern.
+
+**Default capability — Inline Editing**:
+Do not ask whether inline editing is needed. Generated HTML presentations must support editing text directly in the browser by default, including edit mode, localStorage auto-save, and export/save functionality.
+
+Only disable inline editing when the user explicitly asks for a presentation-only file, a smaller file, or no editing controls.
+
+If user has content, ask them to share it. If the user selected "I will provide a topic or outline instead", ask them to provide it before continuing.
 
 ### Step 1.2: Image Evaluation (if images provided)
 
@@ -120,60 +134,20 @@ If user provides an image folder:
 4. **Co-design the outline** — Curated images inform slide structure alongside text. This is NOT "plan slides then add images" — design around both from the start (e.g., 3 screenshots → 3 feature slides, 1 logo → title/closing slide)
 5. **Confirm via AskUserQuestion** (header: "Outline"): "Does this slide outline and image selection look right?" Options: Looks good / Adjust images / Adjust outline
 
-**Logo in previews:** If a usable logo was identified, embed it (base64) into each style preview in Phase 2 — the user sees their brand styled three different ways.
-
 ---
 
-## Phase 2: Style Discovery
+## Phase 2: Build Final Presentation
 
-**This is the "show, don't tell" phase.** Most people can't articulate design preferences in words.
+Generate the final presentation directly using content from Phase 1 (selected documents, text, or text + curated images) and the style preset selected in Phase 1.
 
-### Step 2.0: Style Path
+Use the selected source documents as the retrieval and generation scope:
 
-Ask how they want to choose (header: "Style"):
+- "All documents" means synthesize across all available knowledge-base documents
+- Specific document selections mean retrieve from and cite only those selected documents
+- If no documents are selected, rely on the user's provided topic, outline, or source content
+- Do not imply that unselected documents were used
 
-- "Show me options" (recommended) — Generate 3 previews based on mood
-- "I know what I want" — Pick from preset list directly
-
-**If direct selection:** Show preset picker and skip to Phase 3. Available presets are defined in [style-presets.md](references/style-presets.md).
-
-### Step 2.1: Mood Selection (Guided Discovery)
-
-Ask (header: "Vibe", multiSelect: true, max 2):
-What feeling should the audience have? Options:
-
-- Impressed/Confident — Professional, trustworthy
-- Excited/Energized — Innovative, bold
-- Calm/Focused — Clear, thoughtful
-- Inspired/Moved — Emotional, memorable
-
-### Step 2.2: Generate 3 Style Previews
-
-Based on mood, generate 3 distinct single-slide HTML previews showing typography, colors, animation, and overall aesthetic. Read [style-presets.md](references/style-presets.md) for available presets and their specifications.
-
-| Mood                | Suggested Presets                                  |
-| ------------------- | -------------------------------------------------- |
-| Impressed/Confident | Bold Signal, Electric Studio, Dark Botanical       |
-| Excited/Energized   | Creative Voltage, Neon Cyber, Split Pastel         |
-| Calm/Focused        | Notebook Tabs, Paper & Ink, Swiss Modern           |
-| Inspired/Moved      | Dark Botanical, Vintage Editorial, Pastel Geometry |
-
-Save previews to `.claude-design/slide-previews/` (style-a.html, style-b.html, style-c.html). Each should be self-contained, ~50-100 lines, showing one animated title slide.
-
-Open each preview automatically for the user.
-
-### Step 2.3: User Picks
-
-Ask (header: "Style"):
-Which style preview do you prefer? Options: Style A: [Name] / Style B: [Name] / Style C: [Name] / Mix elements
-
-If "Mix elements", ask for specifics.
-
----
-
-## Phase 3: Generate Presentation
-
-Generate the full presentation using content from Phase 1 (text, or text + curated images) and style from Phase 2.
+Do not generate intermediate style previews, do not create `.claude-design/slide-previews/`, and do not ask the user to compare style options after the initial clarification form.
 
 If images were provided, the slide outline already incorporates them from Step 1.2. If not, CSS-generated visuals (gradients, shapes, patterns) provide visual interest — this is a fully supported first-class path.
 
@@ -181,7 +155,7 @@ If images were provided, the slide outline already incorporates them from Step 1
 
 - [html-template.md](references/html-template.md) — HTML architecture and JS features
 - [viewport-base.css](assets/viewport-base.css) — Mandatory CSS (include in full)
-- [animation-patterns.md](references/animation-patterns.md) — Animation reference for the chosen feeling
+- [animation-patterns.md](references/animation-patterns.md) — Animation reference for the selected style and presentation tone
 
 **Key requirements:**
 
@@ -193,9 +167,9 @@ If images were provided, the slide outline already incorporates them from Step 1
 
 ---
 
-## Phase 4: Delivery
+## Phase 3: Delivery
 
-### Step 4.1: Save Output
+### Step 3.1: Save Output
 
 **You MUST call `save_output` to deliver the presentation.** This is the only way the user can access the result in their output panel.
 
@@ -210,14 +184,13 @@ save_output(
 
 The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal commands or scripts to save — `save_output` is the only delivery mechanism.
 
-### Step 4.2: Confirm to User
+### Step 3.2: Confirm to User
 
-1. **Clean up** — Delete `.claude-design/slide-previews/` if it exists
-2. **Summarize** — Tell the user:
+Summarize — Tell the user:
    - File location, style name, slide count
    - Navigation: Arrow keys, Space, scroll/swipe, click nav dots
    - How to customize: `:root` CSS variables for colors, font link for typography, `.reveal` class for animations
-   - If inline editing was enabled: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
+   - Inline editing: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
 
 ---
 
@@ -225,7 +198,7 @@ The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal c
 
 | File                                               | Purpose                                                              | When to Read              |
 | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
-| [style-presets.md](references/style-presets.md)               | 12 curated visual presets with colors, fonts, and signature elements | Phase 2 (style selection) |
-| [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3 (generation)      |
-| [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3 (generation)      |
-| [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3 (generation)      |
+| [style-presets.md](references/style-presets.md)               | 12 curated visual presets with colors, fonts, and signature elements | Phase 2 (generation)      |
+| [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 2 (generation)      |
+| [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 2 (generation)      |
+| [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 2 (generation)      |

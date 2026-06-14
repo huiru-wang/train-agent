@@ -17,9 +17,6 @@ class DashscopeEmbeddingFunction(EmbeddingFunction):
         pass
 
     def __call__(self, input: Documents) -> Embeddings:
-        logger.info(
-            "[Embedding] calling Dashscope model=%s, %d texts", self.model, len(input)
-        )
         response = dashscope.TextEmbedding.call(
             model=os.getenv("EMBEDDING_MODEL", "text-embedding-v2"),
             api_key=os.getenv("EMBEDDING_API_KEY"),
@@ -35,9 +32,7 @@ class DashscopeEmbeddingFunction(EmbeddingFunction):
             raise RuntimeError(
                 f"Dashscope embedding failed: {response.status_code} {getattr(response, 'message', '')}"
             )
-        logger.info(
-            "[Embedding] success, got %d embeddings", len(response.output["embeddings"])
-        )
+        logger.info("[Embedding] success, got %d embeddings", len(response.output["embeddings"]))
         return [item["embedding"] for item in response.output["embeddings"]]
 
 
@@ -143,9 +138,7 @@ class VectorStore:
         try:
             collection = self._get_existing_collection(workspace_id)
         except NotFoundError:
-            logger.info(
-                "[VectorStore] collection not found for workspace=%s", workspace_id
-            )
+            logger.info("[VectorStore] collection not found for workspace=%s", workspace_id)
             return []
         where = {"doc_id": doc_id} if doc_id else None
         results = collection.query(query_texts=[query], n_results=top_k, where=where)
@@ -163,9 +156,7 @@ class VectorStore:
                     "page_start": meta.get("page_start", 0),
                     "page_end": meta.get("page_end", 0),
                     "section_level": meta.get("section_level", 0),
-                    "distance": (
-                        results["distances"][0][i] if results.get("distances") else None
-                    ),
+                    "distance": (results["distances"][0][i] if results.get("distances") else None),
                 }
             )
         logger.info("[VectorStore] search returned %d results", len(output))
