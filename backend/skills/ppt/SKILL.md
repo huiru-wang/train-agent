@@ -83,11 +83,9 @@ If one or more documents are available, include a multiselect `source_documents`
 
 - List every available document by filename or clear title
 - Include "All documents (Recommended)" as the default/recommended option
-- Include "I will provide a topic or outline instead" as an escape hatch
 - If the user selects "All documents", use every available knowledge-base document
 - If the user selects specific documents, use only those documents as the generation scope
 - If the user selects both "All documents" and specific documents, treat "All documents" as authoritative
-- If the user selects "I will provide a topic or outline instead", require a concrete topic, outline, or source content before generating
 
 If no knowledge-base documents are available, do not show `source_documents`. Instead include a required text field:
 

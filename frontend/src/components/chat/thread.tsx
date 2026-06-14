@@ -858,9 +858,14 @@ function InterruptBlock() {
 
   const interruptValue = interrupt.value as Record<string, unknown>;
 
-  const handleSubmit = (values: Record<string, string | string[]>) => {
+  const handleSubmit = async (values: Record<string, string | string[]>) => {
     setLocalSubmitted(true);
-    onResume(values);
+    try {
+      await onResume(values);
+    } catch (err) {
+      console.error("[InterruptBlock] resume failed:", err);
+      setLocalSubmitted(false);
+    }
   };
 
   if (interruptValue.fields && Array.isArray(interruptValue.fields)) {
