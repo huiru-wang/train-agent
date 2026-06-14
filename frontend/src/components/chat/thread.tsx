@@ -80,6 +80,15 @@ function tryParseJSONObject(rawText: string): Record<string, any> | null {
   }
 }
 
+function isSummarizationMessage(message: any): boolean {
+  if (message?.additional_kwargs?.lc_source === "summarization") {
+    return true;
+  }
+
+  const text = extractTextContent(message?.content).trimStart();
+  return text.startsWith("Here is a summary of the conversation to date:");
+}
+
 function toolCallFingerprint(toolCall: ExtractedToolCall): string {
   return `${toolCall.name}:${stableStringify(toolCall.args)}`;
 }
@@ -141,23 +150,24 @@ function isStreamingContent(messages: any[]): boolean {
 export function Thread() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { messages, isLoading, pendingMessage, error } = useStreamContext();
-  const hasMessages = messages.length > 0 || !!pendingMessage;
+  const visibleMessages = messages.filter((message) => !isSummarizationMessage(message));
+  const hasMessages = visibleMessages.length > 0 || !!pendingMessage;
 
   // Auto-scroll on new content
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages.length, isLoading, pendingMessage]);
+  }, [visibleMessages.length, isLoading, pendingMessage]);
 
   return (
     <div className="flex h-full flex-col">
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
           {!hasMessages && <EmptyState />}
-          <MessageList messages={messages} />
+          <MessageList messages={visibleMessages} />
           {pendingMessage && <HumanBubble text={pendingMessage} pending />}
           <InterruptBlock />
-          {isLoading && !isStreamingContent(messages) && <TypingIndicator />}
+          {isLoading && !isStreamingContent(visibleMessages) && <TypingIndicator />}
           {error && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               出错了：{error.message}
