@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -79,6 +79,21 @@ async def update_workspace_thread(workspace_id: str, req: UpdateThreadRequest):
     logger.info("[API] PATCH /api/workspaces/%s/thread thread_id=%s", workspace_id, req.thread_id)
     await db.update_workspace_thread_id(workspace_id, req.thread_id)
     return {"ok": True}
+
+
+@app.get("/api/threads/{thread_id}/messages")
+async def list_thread_messages(
+    thread_id: str,
+    limit: int = Query(default=10, ge=1, le=100),
+    before: int | None = Query(default=None, ge=1),
+):
+    logger.info(
+        "[API] GET /api/threads/%s/messages limit=%s before=%s",
+        thread_id,
+        limit,
+        before,
+    )
+    return await db.list_thread_messages(thread_id, limit=limit, before=before)
 
 
 @app.delete("/api/workspaces/{workspace_id}")

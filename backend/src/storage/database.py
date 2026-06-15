@@ -1,5 +1,7 @@
 import uuid
 from datetime import datetime, timezone
+import json
+from typing import Any
 
 import aiosqlite
 
@@ -10,9 +12,15 @@ class Database:
         self.connection: aiosqlite.Connection | None = None
 
     async def initialize(self):
+        if self.connection:
+            return
         self.connection = await aiosqlite.connect(self.db_path)
         self.connection.row_factory = aiosqlite.Row
         await self._create_tables()
+
+    async def ensure_initialized(self):
+        if not self.connection:
+            await self.initialize()
 
     async def _create_tables(self):
         await self.connection.executescript("""
@@ -45,6 +53,25 @@ class Database:
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS message (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                thread_id TEXT NOT NULL,
+                workspace_id TEXT,
+                message_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tool_calls TEXT,
+                tool_call_id TEXT,
+                name TEXT,
+                additional_kwargs TEXT,
+                response_metadata TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(thread_id, message_id, role)
+            );
+            CREATE INDEX IF NOT EXISTS idx_message_thread_id_id
+                ON message(thread_id, id DESC);
             PRAGMA foreign_keys = ON;
         """)
         await self._migrate_tables()
@@ -59,6 +86,21 @@ class Database:
             await self.connection.execute(
                 "ALTER TABLE document ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))"
             )
+
+        cursor = await self.connection.execute("PRAGMA table_info(message)")
+        message_columns = {row["name"] for row in await cursor.fetchall()}
+        if message_columns:
+            for column, ddl in {
+                "workspace_id": "ALTER TABLE message ADD COLUMN workspace_id TEXT",
+                "tool_calls": "ALTER TABLE message ADD COLUMN tool_calls TEXT",
+                "tool_call_id": "ALTER TABLE message ADD COLUMN tool_call_id TEXT",
+                "name": "ALTER TABLE message ADD COLUMN name TEXT",
+                "additional_kwargs": "ALTER TABLE message ADD COLUMN additional_kwargs TEXT",
+                "response_metadata": "ALTER TABLE message ADD COLUMN response_metadata TEXT",
+                "updated_at": "ALTER TABLE message ADD COLUMN updated_at TEXT",
+            }.items():
+                if column not in message_columns:
+                    await self.connection.execute(ddl)
 
     async def close(self):
         if self.connection:
@@ -112,7 +154,133 @@ class Database:
         )
         await self.connection.commit()
 
+    # --- Message ---
+
+    @staticmethod
+    def _dump_json(value: Any) -> str:
+        return json.dumps(value, ensure_ascii=False, default=str)
+
+    @staticmethod
+    def _load_json(value: str | None, fallback: Any) -> Any:
+        if value is None:
+            return fallback
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+
+    async def record_message(
+        self,
+        *,
+        thread_id: str,
+        workspace_id: str | None,
+        message_id: str,
+        role: str,
+        content: Any,
+        type: str | None = None,
+        tool_calls: Any = None,
+        tool_call_id: str | None = None,
+        name: str | None = None,
+        additional_kwargs: Any = None,
+        response_metadata: Any = None,
+    ) -> int:
+        await self.ensure_initialized()
+        now = datetime.now(timezone.utc).isoformat()
+        message_type = type or role
+        cursor = await self.connection.execute(
+            """
+            INSERT INTO message (
+                thread_id, workspace_id, message_id, role, type, content,
+                tool_calls, tool_call_id, name, additional_kwargs, response_metadata,
+                created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(thread_id, message_id, role) DO UPDATE SET
+                workspace_id = excluded.workspace_id,
+                type = excluded.type,
+                content = excluded.content,
+                tool_calls = excluded.tool_calls,
+                tool_call_id = excluded.tool_call_id,
+                name = excluded.name,
+                additional_kwargs = excluded.additional_kwargs,
+                response_metadata = excluded.response_metadata,
+                updated_at = excluded.updated_at
+            RETURNING id
+            """,
+            (
+                thread_id,
+                workspace_id,
+                message_id,
+                role,
+                message_type,
+                self._dump_json(content),
+                self._dump_json(tool_calls) if tool_calls is not None else None,
+                tool_call_id,
+                name,
+                self._dump_json(additional_kwargs or {}),
+                self._dump_json(response_metadata or {}),
+                now,
+                now,
+            ),
+        )
+        row = await cursor.fetchone()
+        await self.connection.commit()
+        return int(row["id"])
+
+    async def list_thread_messages(
+        self,
+        thread_id: str,
+        *,
+        limit: int = 50,
+        before: int | None = None,
+    ) -> dict:
+        await self.ensure_initialized()
+        safe_limit = min(max(limit, 1), 100)
+        params: list[Any] = [thread_id]
+        where = "thread_id = ?"
+        if before is not None:
+            where += " AND id < ?"
+            params.append(before)
+        params.append(safe_limit + 1)
+        cursor = await self.connection.execute(
+            f"""
+            SELECT *
+            FROM message
+            WHERE {where}
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            params,
+        )
+        rows = await cursor.fetchall()
+        has_more = len(rows) > safe_limit
+        rows = rows[:safe_limit]
+        messages = [self._message_row_to_dict(row) for row in reversed(rows)]
+        return {
+            "messages": messages,
+            "next_cursor": int(rows[-1]["id"]) if has_more and rows else None,
+        }
+
+    def _message_row_to_dict(self, row: aiosqlite.Row) -> dict:
+        return {
+            "id": int(row["id"]),
+            "thread_id": row["thread_id"],
+            "workspace_id": row["workspace_id"],
+            "message_id": row["message_id"],
+            "role": row["role"],
+            "type": row["type"],
+            "content": self._load_json(row["content"], ""),
+            "tool_calls": self._load_json(row["tool_calls"], []),
+            "tool_call_id": row["tool_call_id"],
+            "name": row["name"],
+            "additional_kwargs": self._load_json(row["additional_kwargs"], {}),
+            "response_metadata": self._load_json(row["response_metadata"], {}),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
     # --- Document ---
+
 
     async def create_document(
         self,

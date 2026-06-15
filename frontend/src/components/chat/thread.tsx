@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect, type FormEvent, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, useEffect, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -81,12 +81,8 @@ function tryParseJSONObject(rawText: string): Record<string, any> | null {
 }
 
 function isSummarizationMessage(message: any): boolean {
-  if (message?.additional_kwargs?.lc_source === "summarization") {
-    return true;
-  }
-
-  const text = extractTextContent(message?.content).trimStart();
-  return text.startsWith("Here is a summary of the conversation to date:");
+  const additionalKwargs = message?.additional_kwargs ?? message?.kwargs?.additional_kwargs;
+  return additionalKwargs?.lc_source === "summarization";
 }
 
 function toolCallFingerprint(toolCall: ExtractedToolCall): string {
@@ -143,26 +139,81 @@ function isStreamingContent(messages: any[]): boolean {
   return false;
 }
 
+function isNearBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight < 120;
+}
+
 // ============================================================
 // Thread (root)
 // ============================================================
 
 export function Thread() {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { messages, isLoading, pendingMessage, error } = useStreamContext();
+  const {
+    messages,
+    isLoading,
+    pendingMessage,
+    error,
+    loadOlderMessages,
+    hasOlderMessages,
+    isLoadingOlderMessages,
+  } = useStreamContext();
+  const shouldStickToBottom = useRef(true);
+  const historyPrependSnapshot = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const visibleMessages = messages.filter((message) => !isSummarizationMessage(message));
   const hasMessages = visibleMessages.length > 0 || !!pendingMessage;
 
-  // Auto-scroll on new content
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el) return;
+
+    const prependSnapshot = historyPrependSnapshot.current;
+    if (prependSnapshot) {
+      el.scrollTop =
+        el.scrollHeight - prependSnapshot.scrollHeight + prependSnapshot.scrollTop;
+      historyPrependSnapshot.current = null;
+      return;
+    }
+
+    if (pendingMessage || shouldStickToBottom.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }
   }, [visibleMessages.length, isLoading, pendingMessage]);
+
+  const handleScroll = useCallback(async () => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    shouldStickToBottom.current = isNearBottom(el);
+    if (el.scrollTop > 80 || !hasOlderMessages || isLoadingOlderMessages) {
+      return;
+    }
+
+    historyPrependSnapshot.current = {
+      scrollHeight: el.scrollHeight,
+      scrollTop: el.scrollTop,
+    };
+    await loadOlderMessages();
+    requestAnimationFrame(() => {
+      const currentEl = scrollRef.current;
+      const prependSnapshot = historyPrependSnapshot.current;
+      if (currentEl && prependSnapshot) {
+        currentEl.scrollTop =
+          currentEl.scrollHeight - prependSnapshot.scrollHeight + prependSnapshot.scrollTop;
+        historyPrependSnapshot.current = null;
+      }
+    });
+  }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages]);
 
   return (
     <div className="flex h-full flex-col">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
+          {isLoadingOlderMessages && (
+            <div className="py-2 text-center text-xs text-muted-foreground">
+              加载历史中...
+            </div>
+          )}
           {!hasMessages && <EmptyState />}
           <MessageList messages={visibleMessages} />
           {pendingMessage && <HumanBubble text={pendingMessage} pending />}

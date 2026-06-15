@@ -80,6 +80,40 @@ export function updateWorkspaceThreadId(workspaceId: string, threadId: string): 
   });
 }
 
+// --- Messages ---
+
+export interface ThreadMessage {
+  id: number;
+  thread_id: string;
+  workspace_id: string | null;
+  message_id: string;
+  role: string;
+  type: string;
+  content: unknown;
+  tool_calls: Array<{ id?: string | null; name?: string | null; args?: Record<string, unknown> }>;
+  tool_call_id: string | null;
+  name: string | null;
+  additional_kwargs: Record<string, unknown>;
+  response_metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ThreadMessagesPage {
+  messages: ThreadMessage[];
+  next_cursor: number | null;
+}
+
+export function listThreadMessages(
+  threadId: string,
+  options: { limit?: number; before?: number | null } = {}
+): Promise<ThreadMessagesPage> {
+  const params = new URLSearchParams();
+  params.set("limit", String(options.limit ?? 10));
+  if (options.before) params.set("before", String(options.before));
+  return request(`/api/threads/${encodeURIComponent(threadId)}/messages?${params.toString()}`);
+}
+
 // --- Documents ---
 
 export interface Document {

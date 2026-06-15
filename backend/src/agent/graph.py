@@ -4,8 +4,10 @@ import os
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
+from src.agent.message_history import MessageHistoryCallback, MessageHistoryMiddleware
 from src.agent.skill_manager import SkillManager
 from src.agent.state import TrainAgentState
+from src.agent.summarization import TrainAgentSummarizationMiddleware
 from src.middlewares import (
     create_inject_doc_context,
     log_after_agent,
@@ -14,7 +16,6 @@ from src.middlewares import (
     log_before_model,
     sanitize_model_request,
 )
-from langchain.agents.middleware import SummarizationMiddleware
 from src.storage.database import Database
 from src.storage.file_store import FileStore
 from src.storage.vector_store import VectorStore
@@ -41,6 +42,8 @@ def create_graph(
         streaming=True,
         extra_body={"enable_thinking": True},
     )
+    message_history_callback = MessageHistoryCallback(db)
+    model.callbacks = [*(model.callbacks or []), message_history_callback]
 
     # --- Tools ---
     rag_tool = create_rag_search_tool(vector_store)
@@ -64,17 +67,20 @@ def create_graph(
         state_schema=TrainAgentState,
         middleware=[
             log_before_agent,
+            MessageHistoryMiddleware(message_history_callback),
             log_before_model,
             sanitize_model_request,
             inject_doc_context,
             log_after_model,
             log_after_agent,
-            SummarizationMiddleware(
+            TrainAgentSummarizationMiddleware(
                 model=os.getenv("MAIN_MODEL"),
                 api_key=os.getenv("DEEPSEEK_API_KEY"),
                 base_url=os.getenv("DEEPSEEK_API_BASE"),
-                trigger=("tokens", 12000),
-                keep=("messages", 20),
+                trigger=("tokens", 20000),
+                keep=("messages", 8),
+                trim_tokens_to_summarize=12000,
+                min_messages_since_summary=8,
             ),
         ],
     )
