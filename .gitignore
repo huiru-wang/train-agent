@@ -13,8 +13,9 @@ node_modules/
 backend/data/
 backend/.langgraph_api/
 
-# Logs
+# Logs & Runtime
 logs/
+tmp/
 
 # Environment
 .env

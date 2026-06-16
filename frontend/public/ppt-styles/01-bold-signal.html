@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>浓烈信号 — 风格预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* === VIEWPORT BASE (MANDATORY) === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow-x: hidden; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+.slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; scroll-snap-align: start; display: flex; flex-direction: column; position: relative; }
+.slide-content { flex: 1; display: flex; flex-direction: column; justify-content: center; max-height: 100%; overflow: hidden; padding: var(--slide-padding); }
+:root {
+    --title-size: clamp(1.5rem, 5vw, 4rem);
+    --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+    --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+    --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+    --small-size: clamp(0.65rem, 1vw, 0.875rem);
+    --slide-padding: clamp(1rem, 4vw, 4rem);
+    --content-gap: clamp(0.5rem, 2vw, 2rem);
+    --element-gap: clamp(0.25rem, 1vw, 1rem);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (max-height: 700px) { :root { --slide-padding: clamp(0.75rem, 3vw, 2rem); --content-gap: clamp(0.4rem, 1.5vw, 1rem); --title-size: clamp(1.25rem, 4.5vw, 2.5rem); --h2-size: clamp(1rem, 3vw, 1.75rem); } }
+@media (max-height: 600px) { :root { --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem); --content-gap: clamp(0.3rem, 1vw, 0.75rem); --title-size: clamp(1.1rem, 4vw, 2rem); --body-size: clamp(0.7rem, 1.2vw, 0.95rem); } .nav-dots, .keyboard-hint, .decorative { display: none; } }
+@media (max-height: 500px) { :root { --slide-padding: clamp(0.4rem, 2vw, 1rem); --title-size: clamp(1rem, 3.5vw, 1.5rem); --h2-size: clamp(0.9rem, 2.5vw, 1.25rem); --body-size: clamp(0.65rem, 1vw, 0.85rem); } }
+@media (max-width: 600px) { :root { --title-size: clamp(1.25rem, 7vw, 2.5rem); } .grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
+
+/* === BOLD SIGNAL THEME === */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+    --card-bg: #FF5722;
+    --text-primary: #ffffff;
+    --text-on-card: #1a1a1a;
+    --font-display: 'Archivo Black', sans-serif;
+    --font-body: 'Space Grotesk', sans-serif;
+}
+
+body {
+    background: var(--bg-gradient);
+    font-family: var(--font-body);
+    color: var(--text-primary);
+}
+
+/* Top bar */
+.top-bar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: clamp(1rem, 3vw, 2.5rem);
+    z-index: 10;
+}
+.section-number {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    color: var(--card-bg);
+}
+.nav-crumbs {
+    display: flex;
+    gap: clamp(0.5rem, 1vw, 1rem);
+    font-size: var(--small-size);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+.nav-crumbs span { opacity: 0.4; }
+.nav-crumbs span.active { opacity: 1; color: var(--card-bg); }
+
+/* Central content */
+.hero-card {
+    background: var(--card-bg);
+    border-radius: clamp(12px, 2vw, 24px);
+    padding: clamp(1.5rem, 4vw, 3.5rem);
+    margin: clamp(1rem, 3vw, 2rem) auto;
+    max-width: min(90vw, 700px);
+    color: var(--text-on-card);
+    box-shadow: 0 clamp(20px, 4vw, 40px) clamp(40px, 8vw, 80px) rgba(255, 87, 34, 0.3);
+}
+.hero-card h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    line-height: 0.95;
+    text-transform: uppercase;
+    margin-bottom: clamp(0.5rem, 1.5vw, 1rem);
+}
+.hero-card p {
+    font-size: var(--body-size);
+    font-weight: 500;
+    line-height: 1.5;
+    max-width: 500px;
+}
+
+/* Bottom title */
+.bottom-title {
+    position: absolute;
+    bottom: clamp(1rem, 3vw, 2.5rem);
+    left: clamp(1rem, 3vw, 2.5rem);
+    right: clamp(1rem, 3vw, 2.5rem);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+.bottom-title .tagline {
+    font-family: var(--font-display);
+    font-size: var(--h2-size);
+    text-transform: uppercase;
+    line-height: 1;
+}
+.bottom-title .meta {
+    font-size: var(--small-size);
+    color: rgba(255,255,255,0.5);
+    text-align: right;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+/* Grid pattern overlay */
+.grid-pattern {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+}
+
+/* Animations */
+.reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.8s var(--ease-out-expo), transform 0.8s var(--ease-out-expo); }
+.visible .reveal { opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(1) { transition-delay: 0.1s; }
+.visible .reveal:nth-child(2) { transition-delay: 0.3s; }
+.visible .reveal:nth-child(3) { transition-delay: 0.5s; }
+
+/* Badge */
+.badge {
+    display: inline-block;
+    padding: 0.3em 1em;
+    border: 2px solid var(--text-on-card);
+    border-radius: 100px;
+    font-size: var(--small-size);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: clamp(0.5rem, 1.5vw, 1rem);
+}
+</style>
+</head>
+<body>
+
+<section class="slide" id="slide1">
+    <div class="grid-pattern"></div>
+
+    <!-- Top bar: number + breadcrumbs -->
+    <div class="top-bar">
+        <div class="section-number reveal">01</div>
+        <nav class="nav-crumbs reveal">
+            <span class="active">序章</span>
+            <span>愿景</span>
+            <span>团队</span>
+            <span>发布</span>
+        </nav>
+    </div>
+
+    <!-- Center card -->
+    <div class="slide-content" style="justify-content: center; align-items: center;">
+        <div class="hero-card reveal">
+            <span class="badge">2025 A轮融资</span>
+            <h1>构建未来<br>从现在开始</h1>
+            <p>我们正在重新定义团队协作方式——让宏大构想以思想的速度落地为产品。</p>
+        </div>
+    </div>
+
+    <!-- Bottom title -->
+    <div class="bottom-title">
+        <div class="tagline reveal">浓烈信号</div>
+        <div class="meta reveal">
+            暗色 · 高冲击力<br>
+            Archivo Black + Space Grotesk
+        </div>
+    </div>
+</section>
+
+<script>
+if (location.search.includes('thumb')) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.add('visible'));
+} else {
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('.slide').forEach(s => obs.observe(s));
+}
+</script>
+</body>
+</html>

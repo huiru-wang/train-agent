@@ -18,6 +18,7 @@ import {
   FileOutput,
   Loader2,
   Zap,
+  Mic,
 } from "lucide-react";
 import { useStreamContext, useResume } from "./assistant";
 import { ClarifyForm } from "./clarify-form";
@@ -494,7 +495,9 @@ const TOOL_LABELS: Record<string, string> = {
   terminal: "命令执行",
   rag_search: "知识库检索",
   load_skill: "读取技能",
-  save_output: "保存产出",
+  save_ppt: "保存PPT",
+  save_narration: "保存口播稿",
+  get_ppt_detail: "获取PPT详情",
   clarify_form: "信息收集",
 };
 
@@ -683,22 +686,32 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
       return <ToolTextBlock value={rawText} />;
     },
   },
-  save_output: {
-    label: () => "保存产出",
+  save_ppt: {
+    label: () => "保存PPT",
     expandable: false,
     summary: ({ toolCall }) => {
       const filename = getToolArgString(toolCall.args, ["filename"]);
       if (filename) return filename;
 
       const title = getToolArgString(toolCall.args, ["title"]);
-      const type = getToolArgString(toolCall.args, ["type"]);
       if (title) {
-        const extensionMap: Record<string, string> = { ppt: ".html", report: ".md" };
         const safeTitle = title.replace(/ /g, "_").replace(/\//g, "_");
-        return `${safeTitle}${extensionMap[type] ?? ".txt"}`;
+        return `${safeTitle}.html`;
       }
       return "";
     },
+  },
+  save_narration: {
+    label: () => "保存口播稿",
+    expandable: false,
+    summary: ({ toolCall }) => {
+      return getToolArgString(toolCall.args, ["title"]);
+    },
+  },
+  get_ppt_detail: {
+    label: () => "获取PPT详情",
+    expandable: false,
+    summary: () => "",
   },
   clarify_form: {
     label: () => "信息收集",
@@ -961,6 +974,9 @@ function InterruptBlock() {
 // Bubbles & indicators
 // ============================================================
 
+// Regex to extract PPT reference tag from message content
+const PPT_REF_TAG_REGEX = /\[ppt-ref:([a-f0-9-]+):([^\]]+)\]/;
+
 function HumanBubble({
   text,
   pending,
@@ -968,13 +984,21 @@ function HumanBubble({
   text: string;
   pending?: boolean;
 }) {
+  // Extract PPT reference tag if present
+  const pptRefMatch = text.match(PPT_REF_TAG_REGEX);
+  const pptRefTitle = pptRefMatch ? pptRefMatch[2] : null;
+  // Remove the tag from display text (collapse residual double spaces)
+  const cleanText = pptRefMatch
+    ? text.replace(PPT_REF_TAG_REGEX, "").replace(/  +/g, " ").trim()
+    : text;
+
   // Parse "/command rest" pattern to render pill + text
   // Allow command to be sent alone (e.g. "/ppt") or with additional text
-  const slashMatch = text.match(/^(\/\w+)(?:\s([\s\S]*))?$/);
+  const slashMatch = cleanText.match(/^(\/\w+)(?:\s([\s\S]*))?$/);
   const command = slashMatch
     ? SLASH_COMMANDS.find((c) => c.command === slashMatch[1])
     : null;
-  const displayText = command ? (slashMatch![2] || "") : text;
+  const displayText = command ? (slashMatch![2] || "") : cleanText;
 
   return (
     <div className="flex justify-end">
@@ -986,6 +1010,9 @@ function HumanBubble({
           <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 border border-accent/30 px-2 py-0.5 text-xs text-accent mr-2 align-middle">
             {command.icon}
             <span className="font-medium">{command.label}</span>
+            {pptRefTitle && (
+              <span className="text-accent/70">：{pptRefTitle}</span>
+            )}
           </span>
         )}
         <span className="whitespace-pre-wrap">{displayText}</span>
@@ -1043,6 +1070,12 @@ const SLASH_COMMANDS: SlashCommand[] = [
     label: "生成培训PPT",
     description: "基于知识库文档生成 HTML 演示文稿",
     icon: <FileOutput size={14} />,
+  },
+  {
+    command: "/narrate",
+    label: "生成口播稿",
+    description: "基于PPT大纲生成口播稿并合成音频",
+    icon: <Mic size={14} />,
   },
 ];
 
@@ -1108,10 +1141,34 @@ function SlashCommandMenu({
 function ChatInput() {
   const [text, setText] = useState("");
   const [activeCommand, setActiveCommand] = useState<SlashCommand | null>(null);
+  const [pillSubtitle, setPillSubtitle] = useState("");
   const [showCommands, setShowCommands] = useState(false);
   const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
-  const { submit, stop, isLoading } = useStreamContext();
+  const { submit, stop, isLoading, externalCommand, onExternalCommandConsumed } = useStreamContext();
   const inputRef = useRef<HTMLInputElement>(null);
+  const pptRefTagRef = useRef<string | null>(null);
+
+  // Listen for external command injection (e.g. from Mic button on PPT card)
+  useEffect(() => {
+    if (externalCommand) {
+      const match = SLASH_COMMANDS.find((c) => c.command === externalCommand.command);
+      if (match) {
+        setActiveCommand(match);
+        setPillSubtitle(externalCommand.subtitle || "");
+        // Store PPT reference tag for embedding in message content
+        const taskId = externalCommand.metadata?.pptTaskId;
+        if (taskId && externalCommand.subtitle) {
+          pptRefTagRef.current = `[ppt-ref:${taskId}:${externalCommand.subtitle}]`;
+        } else {
+          pptRefTagRef.current = null;
+        }
+        setText("");
+        setShowCommands(false);
+        inputRef.current?.focus();
+      }
+      onExternalCommandConsumed?.();
+    }
+  }, [externalCommand, onExternalCommandConsumed]);
 
   const slashFilter = text.startsWith("/") ? text : "";
   const filteredCommands = SLASH_COMMANDS.filter(
@@ -1123,6 +1180,8 @@ function ChatInput() {
 
   const selectCommand = useCallback((cmd: SlashCommand) => {
     setActiveCommand(cmd);
+    setPillSubtitle("");
+    pptRefTagRef.current = null;
     setText("");
     setShowCommands(false);
     setSelectedCmdIndex(0);
@@ -1131,6 +1190,8 @@ function ChatInput() {
 
   const clearCommand = useCallback(() => {
     setActiveCommand(null);
+    setPillSubtitle("");
+    pptRefTagRef.current = null;
   }, []);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1179,13 +1240,23 @@ function ChatInput() {
     if (isMenuVisible) return;
     if (isLoading) return;
     // Allow slash command to be sent alone, or with additional text
-    const content = activeCommand
-      ? (text.trim() ? `${activeCommand.command} ${text.trim()}` : activeCommand.command)
-      : text.trim();
+    const userText = text.trim();
+    let content: string;
+    if (activeCommand) {
+      // Embed PPT reference tag right after command for persistent context
+      const tag = (pillSubtitle && pptRefTagRef.current) ? ` ${pptRefTagRef.current}` : "";
+      content = userText
+        ? `${activeCommand.command}${tag} ${userText}`
+        : `${activeCommand.command}${tag}`;
+    } else {
+      content = userText;
+    }
     if (!content) return;
     submit(content);
     setText("");
     setActiveCommand(null);
+    setPillSubtitle("");
+    pptRefTagRef.current = null;
     setShowCommands(false);
   };
 
@@ -1233,6 +1304,7 @@ function ChatInput() {
           <span className="flex items-center gap-1.5 rounded-full bg-accent/15 border border-accent/30 px-2.5 py-1 text-xs text-accent shrink-0 animate-in fade-in slide-in-from-left-2 duration-150">
             {activeCommand.icon}
             <span className="font-medium">{activeCommand.label}</span>
+            {pillSubtitle && <span className="text-accent/70">：{pillSubtitle}</span>}
           </span>
         )}
 

@@ -1,0 +1,112 @@
+import json
+import logging
+
+from langchain.tools import tool, ToolRuntime
+
+from src.agent.state import TrainAgentState
+from src.storage.database import Database
+from src.storage.file_store import FileStore
+
+logger = logging.getLogger(__name__)
+
+
+async def save_ppt_artifact(
+    db: Database,
+    file_store: FileStore,
+    workspace_id: str,
+    title: str,
+    content: str,
+    filename: str = "",
+    ppt_style: str = "",
+    outline: str = "",
+) -> tuple[dict, str]:
+    """Save a PPT artifact to the file store and create a task record in DB."""
+    if not filename:
+        safe_title = title.replace(" ", "_").replace("/", "_")
+        filename = f"{safe_title}.html"
+
+    task = await db.create_task(
+        workspace_id=workspace_id, type="ppt", title=title
+    )
+    logger.info("[save_ppt] task created: id=%s, title=%s", task["id"], title)
+
+    try:
+        content_bytes = content.encode("utf-8")
+        file_path = await file_store.save_async(
+            workspace_id,
+            f"outputs/{task['id']}/{filename}",
+            content_bytes,
+        )
+        logger.info("[save_ppt] file saved: %s (%d bytes)", file_path, len(content_bytes))
+
+        result_data = {
+            "file_path": file_path,
+            "filename": filename,
+            "ppt_style": ppt_style,
+        }
+
+        # Parse and include outline if provided
+        if outline:
+            try:
+                result_data["outline"] = json.loads(outline) if isinstance(outline, str) else outline
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("[save_ppt] failed to parse outline JSON, storing as string")
+                result_data["outline"] = outline
+
+        await db.update_task(
+            task["id"],
+            status="completed",
+            result_data=json.dumps(result_data, ensure_ascii=False),
+        )
+        return task, f"产出已保存: {title}。用户可在右侧产出面板查看和下载。"
+
+    except Exception as exc:
+        await db.update_task(
+            task["id"],
+            status="failed",
+            result_data=json.dumps({"error": str(exc), "filename": filename}),
+        )
+        logger.error("[save_ppt] failed: %s", exc, exc_info=True)
+        return task, f"产出保存失败: {exc}"
+
+
+def create_save_ppt_tool(db: Database, file_store: FileStore):
+    @tool
+    async def save_ppt(
+        runtime: ToolRuntime[TrainAgentState],
+        title: str,
+        content: str,
+        filename: str = "",
+        outline: str = "",
+    ) -> str:
+        """保存 PPT 产出物。这是将 PPT 交付给用户的唯一方式。
+
+        调用后，产出物会出现在用户的右侧产出面板中，可预览和下载。
+        你必须在完成 PPT 内容后调用此工具，否则用户无法获取结果。
+
+        Args:
+            title: PPT 标题，如"新员工消防培训"
+            content: 完整的自包含 HTML 内容
+            filename: 文件名（可选，默认根据 title 自动生成 .html）
+            outline: 结构化大纲 JSON 字符串，包含 slides 数组（每个 slide 含 number/title/key_points/keywords）
+        """
+        workspace_id = runtime.state.get("workspace_id", "default")
+        ppt_style = runtime.state.get("ppt_style", "")
+        logger.info(
+            "[save_ppt] title=%s, content_len=%d, workspace=%s, style=%s, outline_len=%d",
+            title, len(content), workspace_id, ppt_style, len(outline),
+        )
+
+        _, message = await save_ppt_artifact(
+            db=db,
+            file_store=file_store,
+            workspace_id=workspace_id,
+            title=title,
+            content=content,
+            filename=filename,
+            ppt_style=ppt_style,
+            outline=outline,
+        )
+        return message
+
+    return save_ppt

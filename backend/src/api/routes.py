@@ -74,11 +74,26 @@ class UpdateThreadRequest(BaseModel):
     thread_id: str
 
 
+class UpdateConfigRequest(BaseModel):
+    key: str
+    value: str | int | float | bool | dict | list | None
+
+
 @app.patch("/api/workspaces/{workspace_id}/thread")
 async def update_workspace_thread(workspace_id: str, req: UpdateThreadRequest):
     logger.info("[API] PATCH /api/workspaces/%s/thread thread_id=%s", workspace_id, req.thread_id)
     await db.update_workspace_thread_id(workspace_id, req.thread_id)
     return {"ok": True}
+
+
+@app.patch("/api/workspaces/{workspace_id}/config")
+async def update_workspace_config(workspace_id: str, req: UpdateConfigRequest):
+    logger.info("[API] PATCH /api/workspaces/%s/config key=%s value=%s", workspace_id, req.key, req.value)
+    try:
+        ext_data = await db.update_workspace_ext_data(workspace_id, req.key, req.value)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"ok": True, "ext_data": ext_data}
 
 
 @app.get("/api/threads/{thread_id}/messages")

@@ -1,9 +1,9 @@
 ---
-name: ppt
+name: html-ppt
 description: Create stunning, animation-rich HTML presentations from scratch or by converting PowerPoint files. Use when the user wants to build a presentation, convert a PPT/PPTX to web, or create slides for a talk/pitch. Helps non-designers discover their aesthetic through visual exploration rather than abstract choices.
 ---
 
-# Frontend Slides
+# html-ppt
 
 Create zero-dependency, animation-rich HTML presentations that run entirely in the browser.
 
@@ -73,10 +73,7 @@ What is this presentation for? Options: Pitch deck / Teaching-Tutorial / Confere
 **Question 2 — Length** (header: "Length"):
 Approximately how many slides? Options: Short 5-10 / Medium 10-20 / Long 20+
 
-**Question 3 — Content** (header: "Content"):
-Do you have content ready? Options: All content ready / Rough notes / Topic only
-
-**Question 4 — Source Documents** (header: "Sources"):
+**Question 3 — Source Documents** (header: "Sources"):
 Before asking Phase 1 questions, inspect the knowledge-base document summaries injected in the system prompt.
 
 If one or more documents are available, include a multiselect `source_documents` field:
@@ -95,8 +92,10 @@ If no knowledge-base documents are available, do not show `source_documents`. In
 
 Do not proceed with PPT generation when there are no documents and the user has not provided a concrete topic, outline, or source content.
 
-**Question 5 — Visual Style** (header: "Style"):
-Choose one visual style preset. Options:
+**Question 4 — Visual Style** (header: "Style"):
+If the system prompt contains a "用户配置偏好" section with a PPT visual style already selected, **skip this question entirely** and use the pre-selected style directly. Do not ask the user to choose a style again.
+
+If no pre-selected style is available, ask the user to choose. Options:
 
 - Swiss Modern (Recommended) — Minimal, precise, ideal for technical training and structured explanations
 - Bold Signal — Dark, high-impact, strong emphasis
@@ -138,7 +137,7 @@ If user provides an image folder:
 
 Before generating the final HTML presentation, create a text-only Markdown outline and ask the user to confirm it.
 
-**Hard gate:** Do not generate the full HTML presentation and do not call `save_output` until the user explicitly confirms the outline.
+**Hard gate:** Do not generate the full HTML presentation and do not call `save_ppt` until the user explicitly confirms the outline.
 
 Use the selected source documents as the retrieval and generation scope:
 
@@ -167,10 +166,10 @@ Output the outline as Markdown in this structure:
 
 ### 幻灯片结构
 
-| # | 标题 | 核心内容 | 视觉建议 | 依据/来源 |
-|---|------|----------|----------|-----------|
-| 1 | ... | ... | ... | ... |
-| 2 | ... | ... | ... | ... |
+| # | 标题 | 核心内容 | 关键词 | 视觉建议 | 依据/来源 |
+|---|------|----------|--------|----------|-----------|
+| 1 | ... | ... | 关键词1,关键词2,关键词3 | ... | ... |
+| 2 | ... | ... | 关键词1,关键词2,关键词3 | ... | ... |
 
 ### 内容取舍说明
 
@@ -183,6 +182,27 @@ Output the outline as Markdown in this structure:
 如果这个大纲方向没问题，请回复“确认”。
 如果需要调整，请直接说明希望修改的部分，例如：增加/删除章节、调整页数、更换顺序、加强案例、加强代码、加强图解或总结。
 ```
+
+#### Keywords 生成规则（重要）
+
+`keywords` 的唯一用途是作为 RAG 检索查询词，从知识库原始文档中召回与该幻灯片相关的段落。生成时必须遵守以下规则：
+
+**✅ 必须包含：**
+- 该幻灯片涉及的**具体技术术语、专有名词、API/类名**（如 `ThreadPoolExecutor`、`volatile`、`CountDownLatch`）
+- 该幻灯片涉及的**具体业务场景或操作名称**（如 "加锁顺序"、"死锁预防"、"线程池配置参数"）
+- 优先选择**在源文档原文中出现过的词汇**，以提高向量检索的召回率
+
+**❌ 禁止包含：**
+- **文档来源/出版方名称**：如 "阿里巴巴"、"Oracle"、"IBM"（这些不是文档内容本身，检索不到有用段落）
+- **元描述词/篇章结构词**：如 "总结"、"回顾"、"概述"、"最佳实践"、"要点"（这些词不出现在原文中，检索结果为空）
+- **过于宽泛的通用词**：如 "Java"、"规范"、"编程"、"并发"（单独使用区分度太低，检索噪声大）
+
+**示例对比：**
+
+| 幻灯片 | ❌ 错误 keywords | ✅ 正确 keywords |
+|--------|----------------|----------------|
+| 封面/标题 | 阿里巴巴, Java, 并发, 规范 | 并发处理, 编程规约, 线程安全规范 |
+| 核心要点回顾 | 总结, 回顾, 最佳实践 | ThreadPoolExecutor, 锁粒度, volatile, ConcurrentHashMap |
 
 Keep the outline concise but concrete enough for the user to judge scope, order, and emphasis. Do not call tools in the same assistant message as the outline unless retrieval is needed before writing it.
 
@@ -200,7 +220,7 @@ Explicit confirmations include: "确认", "可以", "没问题", "按这个来",
 During this loop:
 
 - Do not generate the full HTML presentation.
-- Do not call `save_output`.
+- Do not call `save_ppt`.
 - Do not claim the PPT is complete.
 - Preserve the latest confirmed outline as the source of truth for final generation.
 
@@ -233,20 +253,57 @@ The final presentation must follow the confirmed outline. You may split an overl
 
 ### Step 4.1: Save Output
 
-**You MUST call `save_output` to deliver the presentation, but only after the user has explicitly confirmed the outline and the final HTML is complete.** This is the only way the user can access the result in their output panel.
+**You MUST call `save_ppt` to deliver the presentation, but only after the user has explicitly confirmed the outline and the final HTML is complete.** This is the only way the user can access the result in their output panel.
 
-Never call `save_output` during outline drafting, outline revision, or before explicit user approval.
+Never call `save_ppt` during outline drafting, outline revision, or before explicit user approval.
 
 ```
-save_output(
-  type="ppt",
-  title="<presentation title>",
+save_ppt(
+  title="<presentation title, 不超过20个字>",
   content="<full self-contained HTML>",
-  filename="<safe-filename>.html"
+  filename="<safe-filename>.html",
+  outline=<JSON string of structured outline>
 )
 ```
 
-The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal commands or scripts to save — `save_output` is the only delivery mechanism.
+**`title` 命名规则**：标题必须简洁，**不超过 20 个字**。超出时应精简为核心主题（如“并发编程规范精讲”而非“阿里巴巴Java开发手册之并发编程规范精讲”）。
+
+The `outline` parameter must be a JSON string matching this schema:
+```json
+{
+  "title": "PPT主题",
+  "topic": "PPT的核心主题（简短，如：并发编程规范、消防安全培训）",
+  "summary": "PPT的全局摘要（2-3句话概括整个PPT的核心内容和目标）",
+  "audience": "目标受众",
+  "purpose": "用途",
+  "total_slides": 12,
+  "style": "swiss-modern",
+  "slides": [
+    {
+      "number": 1,
+      "title": "幻灯片标题",
+      "key_points": ["要点1", "要点2"],
+      "keywords": ["关键词1", "关键词2", "关键词3"],
+      "source_refs": ["doc_id:xxx"],
+      "notes": "补充说明（可选）"
+    }
+  ]
+}
+```
+
+**`topic`** 是 PPT 的核心主题，简短明了（如"并发编程规范"、"新员工入职安全培训"）。
+**`summary`** 用 2-3 句话概括整个 PPT 的核心内容、目标和价值，用于后续口播稿生成和系统提示展示。
+
+This outline is used later for narration generation and RAG retrieval.
+
+**`keywords` 规则（强制执行）：**
+- 每张幻灯片填写 **3-6 个关键词**
+- 关键词必须能作为 RAG 查询词，从知识库原文中召回与该页相关的段落
+- 只填写**具体的技术术语、专有名词、API/类名、业务场景词**，且优先使用源文档原文中出现过的词汇
+- **禁止**填写：文档来源/出版方名（如"阿里巴巴"）、元描述词（如"总结"、"回顾"、"概述"、"最佳实践"）、过于宽泛的通用词（如单独写"Java"、"规范"）
+- 封面页和总结页同样需要填写与该页实际内容对应的具体术语，不得使用篇章结构词
+
+The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal commands or scripts to save — `save_ppt` is the only delivery mechanism.
 
 ### Step 4.2: Confirm to User
 

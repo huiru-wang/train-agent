@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>复古铅字 — 风格预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,700;0,900;1,400&family=Work+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* === VIEWPORT BASE === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow-x: hidden; }
+.slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+:root {
+    --title-size: clamp(2rem, 6vw, 5rem);
+    --h2-size: clamp(1.25rem, 3vw, 2rem);
+    --body-size: clamp(0.8rem, 1.4vw, 1rem);
+    --small-size: clamp(0.65rem, 1vw, 0.875rem);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (max-height: 600px) { :root { --title-size: clamp(1.5rem, 4vw, 2.5rem); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; } }
+
+/* === VINTAGE EDITORIAL THEME === */
+:root {
+    --bg-cream: #f5f3ee;
+    --text-primary: #1a1a1a;
+    --text-secondary: #555;
+    --accent-warm: #e8d4c0;
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Work Sans', sans-serif;
+}
+
+body { background: var(--bg-cream); font-family: var(--font-body); color: var(--text-primary); }
+
+/* Abstract geometric shapes */
+.geo {
+    position: absolute;
+    pointer-events: none;
+}
+.geo-circle {
+    width: clamp(80px, 12vw, 160px);
+    height: clamp(80px, 12vw, 160px);
+    border: 2px solid var(--text-primary);
+    border-radius: 50%;
+    top: 8%;
+    left: 8%;
+}
+.geo-line {
+    width: 2px;
+    height: clamp(60px, 10vh, 120px);
+    background: var(--text-primary);
+    top: 10%;
+    right: 12%;
+}
+.geo-dot {
+    width: clamp(12px, 1.5vw, 18px);
+    height: clamp(12px, 1.5vw, 18px);
+    border-radius: 50%;
+    background: #c41e3a;
+    bottom: 12%;
+    right: 15%;
+}
+.geo-arc {
+    width: clamp(50px, 7vw, 90px);
+    height: clamp(50px, 7vw, 90px);
+    border: 2px solid var(--text-primary);
+    border-color: transparent transparent var(--text-primary) transparent;
+    border-radius: 50%;
+    bottom: 15%;
+    left: 10%;
+    transform: rotate(-30deg);
+}
+
+/* Content */
+.content-wrapper {
+    max-width: 650px;
+    padding: clamp(1.5rem, 4vw, 3rem);
+    z-index: 2;
+    position: relative;
+    text-align: center;
+}
+
+/* Masthead */
+.masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: clamp(1rem, 2vw, 1.5rem);
+    padding-bottom: clamp(0.5rem, 1vw, 1rem);
+    border-bottom: 2px solid var(--text-primary);
+}
+.masthead-left { font-size: var(--small-size); font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em; }
+.masthead-right { font-size: var(--small-size); font-style: italic; color: var(--text-secondary); }
+
+/* Headline */
+.content-wrapper h1 {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: var(--title-size);
+    line-height: 0.95;
+    color: var(--text-primary);
+    margin-bottom: clamp(0.5rem, 1.5vw, 1rem);
+    letter-spacing: -0.02em;
+}
+.content-wrapper h1 em {
+    font-style: italic;
+    font-weight: 400;
+    color: #c41e3a;
+}
+
+/* Body */
+.content-wrapper .dek {
+    font-size: var(--body-size);
+    line-height: 1.7;
+    color: var(--text-secondary);
+    max-width: 480px;
+    margin: 0 auto clamp(1rem, 2vw, 1.5rem);
+}
+
+/* Bold bordered CTA box */
+.cta-box {
+    display: inline-block;
+    border: 3px solid var(--text-primary);
+    padding: clamp(0.6rem, 1.5vw, 0.8rem) clamp(1.5rem, 3vw, 2rem);
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--body-size);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    background: var(--accent-warm);
+}
+.cta-box:hover { background: var(--text-primary); color: var(--bg-cream); }
+
+/* Byline */
+.byline {
+    margin-top: clamp(0.5rem, 1.5vw, 1rem);
+    font-size: var(--small-size);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Corner issue */
+.issue-corner {
+    position: absolute;
+    top: clamp(1rem, 2vw, 1.5rem);
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(0.7rem, 1vw, 0.9rem);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+.issue-left { left: clamp(1rem, 2vw, 1.5rem); }
+.issue-right { right: clamp(1rem, 2vw, 1.5rem); }
+
+/* Animations */
+.reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.7s var(--ease-out-expo), transform 0.7s var(--ease-out-expo); }
+.visible .reveal:nth-child(1) { transition-delay: 0.1s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(2) { transition-delay: 0.2s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(3) { transition-delay: 0.35s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(4) { transition-delay: 0.5s; opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<section class="slide" id="slide1">
+    <div class="geo geo-circle"></div>
+    <div class="geo geo-line"></div>
+    <div class="geo geo-dot"></div>
+    <div class="geo geo-arc"></div>
+
+    <div class="issue-corner issue-left">第 042 期</div>
+    <div class="issue-corner issue-right">二〇二五年秋季</div>
+
+    <div class="content-wrapper">
+        <div class="masthead reveal">
+            <span class="masthead-left">每日真相</span>
+            <span class="masthead-right">观点</span>
+        </div>
+
+        <h1 class="reveal">关于<em>咖啡</em><br>的真相</h1>
+        <p class="dek reveal">所有人都说咖啡对身体不好。他们错了。你的晨间仪式可能是你一整天最健康的习惯。</p>
+        <a href="#" class="cta-box reveal">阅读全文</a>
+        <div class="byline reveal">玛格丽特·霍洛威 · 资深编辑</div>
+    </div>
+</section>
+
+<script>
+if (location.search.includes('thumb')) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.add('visible'));
+} else {
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('.slide').forEach(s => obs.observe(s));
+}
+</script>
+</body>
+</html>

@@ -6,10 +6,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND="$ROOT/backend"
 FRONTEND="$ROOT/frontend"
 LOGS="$ROOT/logs"
+TMP="$ROOT/tmp"
 
 export TZ=Asia/Shanghai
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$BACKEND/.uv-cache}"
-mkdir -p "$LOGS"
+mkdir -p "$LOGS" "$TMP"
 
 # Colors
 GREEN='\033[0;32m'
@@ -55,14 +56,14 @@ fi
 # --- Start Backend API ---
 log "启动后端 API (port 8000)..."
 cd "$BACKEND"
-nohup uv run uvicorn src.api.routes:app --host 0.0.0.0 --port 8000 --reload > "$LOGS/backend.log" 2>&1 &
-echo $! > "$LOGS/backend.pid"
+nohup uv run uvicorn src.api.routes:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '.venv' > "$LOGS/backend.log" 2>&1 &
+echo $! > "$TMP/backend.pid"
 
 # --- Start LangGraph ---
 log "启动 LangGraph (port 2024)..."
 cd "$BACKEND"
-nohup env NO_COLOR=1 uv run langgraph dev --port 2024 --no-browser > "$LOGS/langgraph.log" 2>&1 &
-echo $! > "$LOGS/langgraph.pid"
+nohup env NO_COLOR=1 uv run langgraph dev --port 2024 --no-browser --no-reload > "$LOGS/langgraph.log" 2>&1 &
+echo $! > "$TMP/langgraph.pid"
 
 # --- Start Frontend ---
 log "启动前端 (port 3000, runner: $FRONTEND_RUNNER)..."
@@ -78,7 +79,7 @@ if [ -f "$HOME/.nvm/nvm.sh" ]; then
   fi
 fi
 nohup "$FRONTEND_RUNNER" run dev > "$LOGS/frontend.log" 2>&1 &
-echo $! > "$LOGS/frontend.pid"
+echo $! > "$TMP/frontend.pid"
 
 sleep 2
 
@@ -110,9 +111,9 @@ check_port() {
   fi
 }
 
-check_port "后端 API" 8000 "$LOGS/backend.pid" "$LOGS/backend.log"
-check_port "LangGraph" 2024 "$LOGS/langgraph.pid" "$LOGS/langgraph.log"
-check_port "前端" 3000 "$LOGS/frontend.pid" "$LOGS/frontend.log"
+check_port "后端 API" 8000 "$TMP/backend.pid" "$LOGS/backend.log"
+check_port "LangGraph" 2024 "$TMP/langgraph.pid" "$LOGS/langgraph.log"
+check_port "前端" 3000 "$TMP/frontend.pid" "$LOGS/frontend.log"
 
 echo ""
 log "日志文件:"

@@ -1,0 +1,125 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+exported_at: "2026-06-16T03:28:02Z"
+modules:
+    "":
+        dir_name: 企业培训智能体全栈平台
+        title: 企业培训智能体全栈平台
+        scope:
+            - README.md
+            - AGENTS.md
+            - TODO.md
+            - .gitignore
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend:
+        dir_name: 企业培训智能体后端服务
+        title: 企业培训智能体后端服务
+        scope:
+            - backend/
+        source_files: []
+        children:
+            - backend/tools_and_skills
+            - backend/middlewares
+            - backend/storage_layer
+            - backend/document_parsing
+            - backend/agent_core
+        depends_on: []
+        related_to:
+            - path: frontend
+            - path: scripts
+    backend/agent_core:
+        dir_name: LangGraph Agent Core
+        title: LangGraph Agent Core
+        scope:
+            - backend/src/agent/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend/tools_and_skills
+            - path: plans_and_user_stories
+    backend/document_parsing:
+        dir_name: 多格式文档结构化解析与分块
+        title: 多格式文档结构化解析与分块
+        scope:
+            - backend/src/parsers/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend/storage_layer
+    backend/middlewares:
+        dir_name: LangChain Agent 中间件与上下文管理
+        title: LangChain Agent 中间件与上下文管理
+        scope:
+            - backend/src/middlewares/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    backend/storage_layer:
+        dir_name: 多模态数据持久化层
+        title: 多模态数据持久化层
+        scope:
+            - backend/src/storage/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend/document_parsing
+    backend/tools_and_skills:
+        dir_name: 智能体工具与技能执行引擎
+        title: 智能体工具与技能执行引擎
+        scope:
+            - backend/src/tools/
+            - backend/skills/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend/agent_core
+    docs:
+        dir_name: Train Agent 系统架构与调试文档
+        title: Train Agent 系统架构与调试文档
+        scope:
+            - docs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    frontend:
+        dir_name: AI 训练助手前端应用
+        title: AI 训练助手前端应用
+        scope:
+            - frontend/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend
+    plans_and_user_stories:
+        dir_name: 培训 Agent 产品规划与用户故事
+        title: 培训 Agent 产品规划与用户故事
+        scope:
+            - plans/
+            - user-story/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend/agent_core
+    scripts:
+        dir_name: 本地开发运维脚本集
+        title: 本地开发运维脚本集
+        scope:
+            - scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: backend

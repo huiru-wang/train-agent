@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.agent.summarization import TrainAgentSummarizationMiddleware
+from src.middlewares.summarization import TrainAgentSummarizationMiddleware
 
 
 def _middleware(*, trigger=("messages", 4), keep=("messages", 2), min_messages_since_summary=3):

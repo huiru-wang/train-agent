@@ -34,6 +34,6 @@ graceful_stop "LangGraph" 2024
 graceful_stop "前端" 3000
 
 # Clean pid files
-rm -f "$ROOT/logs/"*.pid
+rm -f "$ROOT/tmp/"*.pid
 
 warn "全部服务已停止"

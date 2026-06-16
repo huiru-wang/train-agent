@@ -48,6 +48,7 @@ export interface Workspace {
   user_id: string;
   name: string;
   thread_id: string | null;
+  ext_data: Record<string, unknown>;
   created_at: string;
 }
 
@@ -80,6 +81,17 @@ export function updateWorkspaceThreadId(workspaceId: string, threadId: string): 
   });
 }
 
+export function updateWorkspaceConfig(
+  workspaceId: string,
+  key: string,
+  value: unknown
+): Promise<{ ok: boolean; ext_data: Record<string, unknown> }> {
+  return request(`/api/workspaces/${workspaceId}/config`, {
+    method: "PATCH",
+    body: JSON.stringify({ key, value }),
+  });
+}
+
 // --- Messages ---
 
 export interface ThreadMessage {
@@ -104,6 +116,10 @@ export interface ThreadMessagesPage {
   next_cursor: number | null;
 }
 
+/**
+ * List thread messages with turn-based pagination.
+ * ``limit`` controls the number of *turns* (a turn = 1 human + following AI/tool messages).
+ */
 export function listThreadMessages(
   threadId: string,
   options: { limit?: number; before?: number | null } = {}
@@ -181,6 +197,8 @@ export interface Task {
   title: string | null;
   status: string;
   result_data: string | null;
+  parent_task_id?: string | null;
+  children?: Task[];
   created_at: string;
 }
 

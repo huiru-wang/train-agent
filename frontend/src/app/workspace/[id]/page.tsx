@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Bot } from "lucide-react";
+import { ArrowLeft, Bot, Mic } from "lucide-react";
 import { getWorkspace, type Workspace } from "@/lib/api";
 import { ThreePanel } from "@/components/layout/three-panel";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentPanel } from "@/components/document/document-panel";
 import { TaskPanel } from "@/components/task/task-panel";
+import { ConfigPanel } from "@/components/config/config-panel";
+import type { ExternalCommand } from "@/components/chat/assistant";
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -15,12 +17,46 @@ export default function WorkspacePage() {
   const workspaceId = params.id as string;
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [pptStyle, setPptStyle] = useState("swiss-modern");
+  const [voiceId, setVoiceId] = useState("Cherry");
+  const [currentPptTaskId, setCurrentPptTaskId] = useState("");
+  const [externalCommand, setExternalCommand] = useState<ExternalCommand | null>(null);
 
   useEffect(() => {
     getWorkspace(workspaceId)
-      .then(setWorkspace)
+      .then((ws) => {
+        setWorkspace(ws);
+        // Read config from ext_data
+        const ext = ws.ext_data ?? {};
+        if (ext.ppt_style) setPptStyle(ext.ppt_style as string);
+        if (ext.voice_id) setVoiceId(ext.voice_id as string);
+      })
       .catch(() => router.push("/"));
   }, [workspaceId, router]);
+
+  const handleConfigChange = useCallback((key: string, value: string) => {
+    if (key === "ppt_style") setPptStyle(value);
+    if (key === "voice_id") setVoiceId(value);
+  }, []);
+
+  const handleNarrate = useCallback((taskId: string, title: string) => {
+    setCurrentPptTaskId(taskId);
+    setExternalCommand({
+      command: "/narrate",
+      label: "生成口播稿",
+      icon: <Mic size={14} />,
+      subtitle: title,
+      metadata: { pptTaskId: taskId },
+    });
+  }, []);
+
+  const handlePptTaskIdConsumed = useCallback(() => {
+    setCurrentPptTaskId("");
+  }, []);
+
+  const handleExternalCommandConsumed = useCallback(() => {
+    setExternalCommand(null);
+  }, []);
 
   if (!workspace) {
     return (
@@ -29,6 +65,20 @@ export default function WorkspacePage() {
       </div>
     );
   }
+
+  const rightPanel = (
+    <div className="flex h-full flex-col">
+      <ConfigPanel
+        workspaceId={workspaceId}
+        pptStyle={pptStyle}
+        voiceId={voiceId}
+        onConfigChange={handleConfigChange}
+      />
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <TaskPanel workspaceId={workspaceId} onNarrate={handleNarrate} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen flex-col">
@@ -52,8 +102,8 @@ export default function WorkspacePage() {
       <div className="flex-1 overflow-hidden">
         <ThreePanel
           left={<DocumentPanel workspaceId={workspaceId} />}
-          center={<ChatPanel workspaceId={workspaceId} />}
-          right={<TaskPanel workspaceId={workspaceId} collapsed={rightCollapsed} onToggle={() => setRightCollapsed((v) => !v)} />}
+          center={<ChatPanel workspaceId={workspaceId} pptStyle={pptStyle} currentPptTaskId={currentPptTaskId} onPptTaskIdConsumed={handlePptTaskIdConsumed} externalCommand={externalCommand} onExternalCommandConsumed={handleExternalCommandConsumed} />}
+          right={rightPanel}
           rightCollapsed={rightCollapsed}
           onRightToggle={() => setRightCollapsed((v) => !v)}
         />

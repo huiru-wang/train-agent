@@ -5,19 +5,18 @@ import os
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
-from src.agent.skill_manager import SkillManager
+from src.app_context import AppContext
 from src.services.doc_service import DocService
-from src.storage.database import Database
-from src.storage.file_store import FileStore
-from src.storage.vector_store import VectorStore
 
 load_dotenv()
 
-DATA_DIR = os.getenv("DATA_DIR", "./data")
+app_ctx = AppContext.from_env()
 
-db = Database(f"{DATA_DIR}/train_agent.db")
-vector_store = VectorStore(f"{DATA_DIR}/chroma")
-file_store = FileStore(f"{DATA_DIR}/files")
+# Backward-compatible aliases
+db = app_ctx.db
+vector_store = app_ctx.vector_store
+file_store = app_ctx.file_store
+skill_manager = app_ctx.skill_manager
 
 llm = ChatOpenAI(
     model=os.getenv("SUMMARIZATION_MODEL"),
@@ -28,4 +27,3 @@ llm = ChatOpenAI(
 doc_service = DocService(
     db=db, vector_store=vector_store, file_store=file_store, llm=llm
 )
-skill_manager = SkillManager(os.path.join(os.path.dirname(__file__), "../../skills"))

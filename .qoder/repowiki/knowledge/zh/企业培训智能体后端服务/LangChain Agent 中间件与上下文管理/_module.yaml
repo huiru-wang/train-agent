@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: backend/middlewares
+title: LangChain Agent 中间件与上下文管理
+scope:
+    - backend/src/middlewares/
+source_files: []
+depends_on: []
+related_to: []

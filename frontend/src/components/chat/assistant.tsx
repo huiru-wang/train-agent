@@ -6,7 +6,18 @@ import { updateWorkspaceThreadId, getWorkspace, listThreadMessages, type ThreadM
 
 const LANGGRAPH_API_URL =
   process.env.NEXT_PUBLIC_LANGGRAPH_API_URL || "http://localhost:2024";
-const MESSAGE_HISTORY_LIMIT = 5;
+// Number of *turns* to load per page (a turn = 1 human message + all following AI/tool messages)
+const MESSAGE_HISTORY_LIMIT = 3;
+
+// --- External command (for programmatic pill injection from parent components) ---
+
+export interface ExternalCommand {
+  command: string;
+  label: string;
+  icon: ReactNode;
+  subtitle?: string;
+  metadata?: Record<string, string>;
+}
 
 // --- Stream context ---
 
@@ -21,6 +32,8 @@ interface StreamContextValue {
   loadOlderMessages: () => Promise<void>;
   hasOlderMessages: boolean;
   isLoadingOlderMessages: boolean;
+  externalCommand: ExternalCommand | null;
+  onExternalCommandConsumed?: () => void;
 }
 
 const StreamContext = createContext<StreamContextValue>({
@@ -34,6 +47,7 @@ const StreamContext = createContext<StreamContextValue>({
   loadOlderMessages: async () => { },
   hasOlderMessages: false,
   isLoadingOlderMessages: false,
+  externalCommand: null,
 });
 
 export function useStreamContext() {
@@ -53,10 +67,15 @@ export function useResume() {
 
 interface AssistantProps {
   workspaceId: string;
+  pptStyle?: string;
+  currentPptTaskId?: string;
+  onPptTaskIdConsumed?: () => void;
+  externalCommand?: ExternalCommand | null;
+  onExternalCommandConsumed?: () => void;
   children: ReactNode;
 }
 
-export function Assistant({ workspaceId, children }: AssistantProps) {
+export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskIdConsumed, externalCommand, onExternalCommandConsumed, children }: AssistantProps) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [historyMessages, setHistoryMessages] = useState<any[]>([]);
   const [historyNextCursor, setHistoryNextCursor] = useState<number | null>(null);
@@ -218,9 +237,15 @@ export function Assistant({ workspaceId, children }: AssistantProps) {
       {
         messages: [{ type: "human", content }],
         workspace_id: workspaceId,
+        ppt_style: pptStyle || "",
+        current_ppt_task_id: currentPptTaskId || "",
       },
       { config: { recursion_limit: 30 } },
     );
+    // Clear the narrate task ID after submitting
+    if (currentPptTaskId) {
+      onPptTaskIdConsumed?.();
+    }
   };
 
   const handleResume = async (values: Record<string, string | string[]>) => {
@@ -244,6 +269,8 @@ export function Assistant({ workspaceId, children }: AssistantProps) {
         loadOlderMessages,
         hasOlderMessages: historyNextCursor !== null,
         isLoadingOlderMessages,
+        externalCommand: externalCommand ?? null,
+        onExternalCommandConsumed,
       }}
     >
       <ResumeContext.Provider value={handleResume}>
