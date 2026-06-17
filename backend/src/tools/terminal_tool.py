@@ -60,6 +60,7 @@ async def terminal(
     workdir: Annotated[Optional[str], "工作目录（必须是绝对路径）"] = None,
     timeout: Annotated[Optional[int], "超时时间（秒），默认 60 秒"] = 60,
     background: Annotated[bool, "是否在后台执行"] = False,
+    **kwargs,
 ) -> str:
     """执行 shell 命令并返回输出。用于运行技能脚本、检查文件等。
 

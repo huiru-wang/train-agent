@@ -22,7 +22,7 @@ class ClarifyFormInput(BaseModel):
 
 
 @tool(args_schema=ClarifyFormInput)
-def clarify_form(title: str, description: str, fields: list[dict]) -> str:
+def clarify_form(title: str, description: str, fields: list[dict], **kwargs) -> str:
     """向用户展示一个表单来收集信息。当需要用户澄清意图、选择选项或提供详细参数时使用此工具。
     表单会在前端渲染为交互式UI，用户填写后结果会返回给你。
 

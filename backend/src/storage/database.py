@@ -517,6 +517,33 @@ class Database:
         )
         await self.connection.commit()
 
-    async def delete_task(self, task_id: str):
+    async def delete_task(self, task_id: str) -> list[str]:
+        """Delete a task. If PPT, also delete all child tasks (cascade).
+
+        Returns list of deleted task IDs.
+        """
+        # Get task info
+        cursor = await self.connection.execute(
+            "SELECT id, type FROM task WHERE id = ?", (task_id,)
+        )
+        task = await cursor.fetchone()
+        if not task:
+            return []
+
+        deleted_ids: list[str] = [task_id]
+
+        if task["type"] == "ppt":
+            # Cascade: find and delete all child tasks
+            cursor = await self.connection.execute(
+                "SELECT id FROM task WHERE parent_task_id = ?", (task_id,)
+            )
+            children = await cursor.fetchall()
+            for child in children:
+                deleted_ids.append(child["id"])
+            await self.connection.execute(
+                "DELETE FROM task WHERE parent_task_id = ?", (task_id,)
+            )
+
         await self.connection.execute("DELETE FROM task WHERE id = ?", (task_id,))
         await self.connection.commit()
+        return deleted_ids

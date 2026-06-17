@@ -39,6 +39,7 @@ def create_load_skill_tool(skill_manager: SkillManager):
             list[str],
             "要加载的文件路径列表，最多5 个，如 [\"references/docs.md\", \"scripts/save_and_output.py\", \"assets/theme.css\"]"
         ] = [],
+        **kwargs,
     ) -> str:
         """加载技能提示或技能内的文件。
 

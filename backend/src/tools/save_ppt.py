@@ -78,6 +78,7 @@ def create_save_ppt_tool(db: Database, file_store: FileStore):
         content: str,
         filename: str = "",
         outline: str = "",
+        **kwargs,
     ) -> str:
         """保存 PPT 产出物。这是将 PPT 交付给用户的唯一方式。
 

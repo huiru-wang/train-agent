@@ -45,6 +45,7 @@ def create_run_skill_script_tool(skill_manager: SkillManager):
         script: Annotated[str, "脚本文件名，如 export-pdf.sh（只需文件名，无需路径）"],
         args: Annotated[list[str], "传给脚本的参数列表，如 [\"/data/outputs/deck.html\"]"] = [],
         timeout: Annotated[int, "超时时间（秒），默认 120"] = 120,
+        **kwargs,
     ) -> str:
         """执行 Skill 目录下 scripts/ 中的脚本。
 

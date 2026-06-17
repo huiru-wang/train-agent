@@ -14,6 +14,7 @@ def create_get_ppt_detail_tool(db: Database):
     async def get_ppt_detail(
         runtime: ToolRuntime[TrainAgentState],
         task_id: str,
+        **kwargs,
     ) -> str:
         """获取指定 PPT 任务的详细信息，包括结构化大纲、风格、文件路径等。
         用于生成口播稿时获取幻灯片结构和关键词。

@@ -1,4 +1,6 @@
+import json
 import logging
+import shutil
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
@@ -168,8 +170,45 @@ async def list_tasks(workspace_id: str):
 @app.delete("/api/workspaces/{workspace_id}/tasks/{task_id}")
 async def delete_task(workspace_id: str, task_id: str):
     logger.info("[API] DELETE /api/workspaces/%s/tasks/%s", workspace_id, task_id)
-    await db.delete_task(task_id)
-    return {"ok": True}
+
+    # Get task info before deleting (for file cleanup)
+    task = await db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Cascade delete from DB (returns all deleted task IDs)
+    deleted_ids = await db.delete_task(task_id)
+
+    # --- File cleanup ---
+    output_base = Path(file_store.base_dir) / workspace_id / "outputs"
+
+    if task["type"] == "ppt":
+        # PPT: remove entire outputs/{ppt_task_id}/ directory
+        ppt_dir = output_base / task_id
+        if ppt_dir.exists():
+            shutil.rmtree(ppt_dir, ignore_errors=True)
+            logger.info("[API] removed PPT output directory: %s", ppt_dir)
+    elif task["type"] == "narration":
+        # Narration: delete individual files from result_data
+        result_data = {}
+        if task.get("result_data"):
+            try:
+                result_data = json.loads(task["result_data"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        # Delete audio files
+        for slide in result_data.get("slides", []):
+            audio_path = slide.get("audio_path")
+            if audio_path:
+                p = Path(audio_path)
+                if p.exists():
+                    p.unlink(missing_ok=True)
+        # Delete narration text file
+        for f in output_base.rglob(f"{task_id}_narration.md"):
+            f.unlink(missing_ok=True)
+        logger.info("[API] cleaned narration files for task: %s", task_id)
+
+    return {"ok": True, "deleted_ids": deleted_ids}
 
 
 # --- File download ---

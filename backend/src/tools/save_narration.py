@@ -80,6 +80,7 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         slides: str,
         language: str = "zh",
         voice: str = "",
+        **kwargs,
     ) -> str:
         """保存口播稿并触发 TTS 音频生成。
 
