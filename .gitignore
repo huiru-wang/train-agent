@@ -29,4 +29,5 @@ tmp/
 
 # Agent
 .claude/
+.qoder/
 debug/

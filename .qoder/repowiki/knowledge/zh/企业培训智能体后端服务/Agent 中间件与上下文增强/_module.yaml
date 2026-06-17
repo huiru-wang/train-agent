@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: backend/middlewares
-title: Agent 中间件与上下文增强
-scope:
-    - backend/src/middlewares/
-source_files: []
-depends_on: []
-related_to: []

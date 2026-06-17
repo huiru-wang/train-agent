@@ -81,9 +81,13 @@ function tryParseJSONObject(rawText: string): Record<string, any> | null {
   }
 }
 
-function isSummarizationMessage(message: any): boolean {
-  const additionalKwargs = message?.additional_kwargs ?? message?.kwargs?.additional_kwargs;
-  return additionalKwargs?.lc_source === "summarization";
+function isHiddenMessage(message: any): boolean {
+  if (message?.name === "summary") return true;
+  const kwargs = message?.additional_kwargs;
+  if (kwargs?.train_agent_hidden) return true;
+  if (kwargs?.lc_source === "summarization") return true;
+  const content = typeof message?.content === "string" ? message.content : "";
+  return content.startsWith("Here is a summary of the conversation to date:");
 }
 
 function toolCallFingerprint(toolCall: ExtractedToolCall): string {
@@ -153,7 +157,6 @@ export function Thread() {
   const {
     messages,
     isLoading,
-    pendingMessage,
     error,
     loadOlderMessages,
     hasOlderMessages,
@@ -161,8 +164,8 @@ export function Thread() {
   } = useStreamContext();
   const shouldStickToBottom = useRef(true);
   const historyPrependSnapshot = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const visibleMessages = messages.filter((message) => !isSummarizationMessage(message));
-  const hasMessages = visibleMessages.length > 0 || !!pendingMessage;
+  const visibleMessages = messages.filter((message) => !isHiddenMessage(message));
+  const hasMessages = visibleMessages.length > 0;
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -176,10 +179,10 @@ export function Thread() {
       return;
     }
 
-    if (pendingMessage || shouldStickToBottom.current) {
+    if (shouldStickToBottom.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
-  }, [visibleMessages.length, isLoading, pendingMessage]);
+  }, [visibleMessages.length, isLoading]);
 
   const handleScroll = useCallback(async () => {
     const el = scrollRef.current;
@@ -217,7 +220,6 @@ export function Thread() {
           )}
           {!hasMessages && <EmptyState />}
           <MessageList messages={visibleMessages} />
-          {pendingMessage && <HumanBubble text={pendingMessage} pending />}
           <InterruptBlock />
           {isLoading && !isStreamingContent(visibleMessages) && <TypingIndicator />}
           {error && (

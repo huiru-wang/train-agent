@@ -1,7 +1,7 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { useStream } from "@langchain/react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStream } from "@langchain/langgraph-sdk/react";
 import { updateWorkspaceThreadId, getWorkspace, listThreadMessages, type ThreadMessage } from "@/lib/api";
 
 const LANGGRAPH_API_URL =
@@ -28,7 +28,6 @@ interface StreamContextValue {
   submit: (content: string) => void;
   stop: () => void;
   error: Error | null;
-  pendingMessage: string | null;
   loadOlderMessages: () => Promise<void>;
   hasOlderMessages: boolean;
   isLoadingOlderMessages: boolean;
@@ -43,7 +42,6 @@ const StreamContext = createContext<StreamContextValue>({
   submit: () => { },
   stop: () => { },
   error: null,
-  pendingMessage: null,
   loadOlderMessages: async () => { },
   hasOlderMessages: false,
   isLoadingOlderMessages: false,
@@ -80,15 +78,11 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
   const [historyMessages, setHistoryMessages] = useState<any[]>([]);
   const [historyNextCursor, setHistoryNextCursor] = useState<number | null>(null);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
-  const [liveMessages, setLiveMessages] = useState<any[]>([]);
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
-  const prevMessageCount = useRef(0);
-  const streamBaselineKeys = useRef<Set<string>>(new Set());
-  const wasLoading = useRef(false);
+  const summarizedIds = useRef<Set<string>>(new Set());
 
   const loadHistoryMessages = useCallback(async (targetThreadId: string) => {
     const page = await listThreadMessages(targetThreadId, { limit: MESSAGE_HISTORY_LIMIT });
-    setHistoryMessages(page.messages.map(toLangGraphMessage).filter((message) => !isSummarizationMessage(message)));
+    setHistoryMessages(page.messages.map(toLangGraphMessage).filter((message) => !isHiddenMessage(message)));
     setHistoryNextCursor(page.next_cursor);
   }, []);
 
@@ -103,7 +97,7 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
       });
       const olderMessages = page.messages
         .map(toLangGraphMessage)
-        .filter((message) => !isSummarizationMessage(message));
+        .filter((message) => !isHiddenMessage(message));
       setHistoryMessages((current) => mergeMessages(olderMessages, current));
       setHistoryNextCursor(page.next_cursor);
     } finally {
@@ -124,45 +118,75 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
     if (!threadId) {
       setHistoryMessages([]);
       setHistoryNextCursor(null);
-      setLiveMessages([]);
-      streamBaselineKeys.current = new Set();
       return;
     }
     let cancelled = false;
-    loadHistoryMessages(threadId)
-      .then(() => {
-        if (!cancelled) {
-          setLiveMessages([]);
-          streamBaselineKeys.current = new Set();
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHistoryMessages([]);
-          setHistoryNextCursor(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
+    loadHistoryMessages(threadId).catch(() => {
+      if (!cancelled) {
+        setHistoryMessages([]);
+        setHistoryNextCursor(null);
+      }
+    });
+    return () => { cancelled = true; };
   }, [threadId, loadHistoryMessages]);
+
+  // Stable callbacks via refs — prevents useStream from seeing new references each render
+  const threadIdRef = useRef(threadId);
+  threadIdRef.current = threadId;
+  const workspaceIdRef = useRef(workspaceId);
+  workspaceIdRef.current = workspaceId;
+
+  const handleThreadId = useCallback((newThreadId: string) => {
+    if (newThreadId !== threadIdRef.current) {
+      setThreadId(newThreadId);
+      updateWorkspaceThreadId(workspaceIdRef.current, newThreadId).catch(() => { });
+    }
+  }, []);
+
+  // Snapshot of stream messages for summarization diff (updated during render)
+  const streamMessagesSnapshotRef = useRef<any[]>([]);
+
+  const handleUpdateEvent = useCallback((data: unknown) => {
+    const sumMsgs = getSummarizationMessages(data);
+    if (!sumMsgs || sumMsgs.length < 2) return;
+
+    for (const m of sumMsgs) {
+      if (m.name === "summary" && m.type === "human") {
+        summarizedIds.current.add(m.id ?? "");
+      }
+    }
+
+    const firstRetained = sumMsgs
+      .filter((m: any) => m.type !== "remove")
+      .filter((m: any) => !isHiddenMessage(m))
+      .map(messageIdentity)
+      .find(Boolean);
+
+    const current = [...streamMessagesSnapshotRef.current];
+    const moved: any[] = [];
+    for (const m of current) {
+      if (firstRetained && messageIdentity(m) === firstRetained) break;
+      if (!summarizedIds.current.has(m.id ?? "")) {
+        moved.push(m);
+      }
+    }
+    if (moved.length > 0) {
+      setHistoryMessages((prev) => mergeMessages(prev, moved));
+    }
+  }, []);
 
   const stream = useStream({
     apiUrl: LANGGRAPH_API_URL,
     assistantId: "train_agent",
     threadId,
+    onThreadId: handleThreadId,
+    onUpdateEvent: handleUpdateEvent,
   });
 
-  // Debug: log stream state changes
-  useEffect(() => {
-    console.log("[Assistant] stream state:", {
-      threadId: stream.threadId,
-      messagesCount: stream.messages?.length,
-      isLoading: stream.isLoading,
-      error: stream.error,
-      interrupt: stream.interrupt,
-    });
-  }, [stream.threadId, stream.messages?.length, stream.isLoading, stream.error, stream.interrupt]);
+  // Keep snapshot ref in sync (used by handleUpdateEvent callback)
+  if (stream.messages.length >= streamMessagesSnapshotRef.current.length) {
+    streamMessagesSnapshotRef.current = stream.messages;
+  }
 
   // Auto-recover from stale threadId
   useEffect(() => {
@@ -182,57 +206,43 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
     }
   }, [stream.error]);
 
-  // Persist new threadId
-  useEffect(() => {
-    if (stream.threadId && stream.threadId !== threadId) {
-      setThreadId(stream.threadId);
-      updateWorkspaceThreadId(workspaceId, stream.threadId).catch(() => { });
-    }
-  }, [stream.threadId, workspaceId, threadId]);
+  // --- Derived: live messages (computed, NOT state — breaks the infinite loop) ---
+  //
+  // ROOT CAUSE: stream.messages is a getter that returns a NEW array on every
+  // render. Using it as a useEffect dependency causes effect → setState →
+  // re-render → effect → ... → "Maximum update depth exceeded".
+  //
+  // FIX: Use useMemo with primitive/stable dependency keys instead of the
+  // stream.messages reference. The dep key captures:
+  //   1. stream.messages.length — changes when a new message arrives
+  //   2. last message content — changes on every streaming token
+  //   3. stream.isLoading — changes when stream starts/ends
+  //   4. historyMessages — changes when history is (re)loaded
+  const liveMessages = useMemo(() => {
+    const sm = stream.messages ?? [];
+    const historyKeys = new Set(historyMessages.map(messageKey));
+    return sm.filter(
+      (m: any) => !historyKeys.has(messageKey(m)) && !isHiddenMessage(m),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    stream.messages.length,
+    stream.messages.length > 0
+      ? JSON.stringify((stream.messages[stream.messages.length - 1] as any)?.content ?? "").slice(0, 200)
+      : "",
+    stream.isLoading,
+    historyMessages,
+  ]);
 
-  // Clear pending message once server echoes back
-  useEffect(() => {
-    if (stream.messages.length > prevMessageCount.current && pendingMessage) {
-      setPendingMessage(null);
-    }
-    prevMessageCount.current = stream.messages.length;
-  }, [stream.messages.length, pendingMessage]);
-
-  useEffect(() => {
-    const streamMessages = stream.messages ?? [];
-    if (pendingMessage || stream.isLoading || liveMessages.length > 0) {
-      const baseline = streamBaselineKeys.current;
-      setLiveMessages(
-        streamMessages.filter((message) => {
-          return !baseline.has(messageKey(message)) && !isSummarizationMessage(message);
-        }),
-      );
-    } else {
-      streamBaselineKeys.current = new Set(streamMessages.map(messageKey));
-    }
-  }, [stream.messages, stream.isLoading, pendingMessage, liveMessages.length]);
-
-  useEffect(() => {
-    const justFinished = wasLoading.current && !stream.isLoading;
-    wasLoading.current = stream.isLoading;
-    if (!justFinished || !threadId) return;
-
-    loadHistoryMessages(threadId)
-      .then(() => {
-        setLiveMessages([]);
-        streamBaselineKeys.current = new Set((stream.messages ?? []).map(messageKey));
-      })
-      .catch(() => { });
-  }, [stream.isLoading, stream.messages, threadId, loadHistoryMessages]);
+  // Merge history + live for display
+  const allMessages = useMemo(() => {
+    return mergeMessages(historyMessages, liveMessages);
+  }, [historyMessages, liveMessages]);
 
   const streamRef = useRef(stream);
   streamRef.current = stream;
 
-  // Wrapped submit — slash command is now encoded directly in content
   const handleSubmit = (content: string) => {
-    streamBaselineKeys.current = new Set((streamRef.current.messages ?? []).map(messageKey));
-    setLiveMessages([]);
-    setPendingMessage(content);
     streamRef.current.submit(
       {
         messages: [{ type: "human", content }],
@@ -242,30 +252,24 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
       },
       { config: { recursion_limit: 30 } },
     );
-    // Clear the narrate task ID after submitting
     if (currentPptTaskId) {
       onPptTaskIdConsumed?.();
     }
   };
 
   const handleResume = async (values: Record<string, string | string[]>) => {
-    await streamRef.current.respond(values);
-  };
-
-  const handleStop = () => {
-    streamRef.current.stop();
+    await streamRef.current.submit(null, { command: { resume: values } });
   };
 
   return (
     <StreamContext.Provider
       value={{
-        messages: mergeMessages(historyMessages, liveMessages),
+        messages: allMessages,
         isLoading: stream.isLoading,
         interrupt: stream.interrupt,
         submit: handleSubmit,
-        stop: handleStop,
-        error: (stream.error as Error) ?? null,
-        pendingMessage,
+        stop: () => streamRef.current.stop(),
+        error: stream.error != null ? new Error(String(stream.error)) : null,
         loadOlderMessages,
         hasOlderMessages: historyNextCursor !== null,
         isLoadingOlderMessages,
@@ -300,9 +304,38 @@ function messageKey(message: any): string {
   return `${type}:${JSON.stringify(message?.content ?? "")}`;
 }
 
-function isSummarizationMessage(message: any): boolean {
-  const additionalKwargs = message?.additional_kwargs ?? message?.kwargs?.additional_kwargs;
-  return additionalKwargs?.lc_source === "summarization";
+function isHiddenMessage(message: any): boolean {
+  // 1. name field check (most reliable)
+  if (message?.name === "summary") return true;
+  // 2. additional_kwargs check
+  const kwargs = message?.additional_kwargs;
+  if (kwargs?.train_agent_hidden) return true;
+  if (kwargs?.lc_source === "summarization") return true;
+  // 3. content fallback
+  const content = typeof message?.content === "string" ? message.content : "";
+  if (content.startsWith("Here is a summary of the conversation to date:")) return true;
+  return false;
+}
+
+const SUMMARIZATION_UPDATE_KEYS = new Set([
+  "SummarizationMiddleware.before_model",
+  "TrainAgentSummarizationMiddleware.before_model",
+]);
+
+function getSummarizationMessages(data: unknown): any[] | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  for (const [key, update] of Object.entries(data)) {
+    if (!SUMMARIZATION_UPDATE_KEYS.has(key)) continue;
+    const messages = (update as any)?.messages;
+    if (Array.isArray(messages)) return [...messages];
+  }
+  return undefined;
+}
+
+function messageIdentity(message: any): string | undefined {
+  if (message?.tool_call_id) return `tool:${message.tool_call_id}`;
+  if (message?.id) return `message:${message.id}`;
+  return undefined;
 }
 
 function mergeMessages(history: any[], live: any[]) {

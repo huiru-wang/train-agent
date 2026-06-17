@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: backend/document_parsing
-title: 多格式文档结构化解析与分块
-scope:
-    - backend/src/parsers/
-source_files: []
-depends_on: []
-related_to:
-    - path: backend/storage_layer
