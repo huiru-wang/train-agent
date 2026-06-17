@@ -1,10 +1,8 @@
 schema_version: 1
 module_path: backend/agent_core
-title: LangGraph Agent Core
+title: 培训智能体核心引擎
 scope:
     - backend/src/agent/
 source_files: []
 depends_on: []
-related_to:
-    - path: backend/tools_and_skills
-    - path: plans_and_user_stories
+related_to: []

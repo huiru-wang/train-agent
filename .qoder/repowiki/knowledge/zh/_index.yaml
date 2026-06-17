@@ -2,7 +2,7 @@
 schema_version: 1
 locale: zh-CN
 branch: main
-exported_at: "2026-06-16T03:28:02Z"
+exported_at: "2026-06-16T13:43:41Z"
 modules:
     "":
         dir_name: 企业培训智能体全栈平台
@@ -24,25 +24,23 @@ modules:
         source_files: []
         children:
             - backend/tools_and_skills
-            - backend/middlewares
             - backend/storage_layer
-            - backend/document_parsing
+            - backend/middlewares
             - backend/agent_core
+            - backend/document_parsing
         depends_on: []
         related_to:
             - path: frontend
             - path: scripts
     backend/agent_core:
-        dir_name: LangGraph Agent Core
-        title: LangGraph Agent Core
+        dir_name: 培训智能体核心引擎
+        title: 培训智能体核心引擎
         scope:
             - backend/src/agent/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend/tools_and_skills
-            - path: plans_and_user_stories
+        related_to: []
     backend/document_parsing:
         dir_name: 多格式文档结构化解析与分块
         title: 多格式文档结构化解析与分块
@@ -54,8 +52,8 @@ modules:
         related_to:
             - path: backend/storage_layer
     backend/middlewares:
-        dir_name: LangChain Agent 中间件与上下文管理
-        title: LangChain Agent 中间件与上下文管理
+        dir_name: Agent 中间件与上下文增强
+        title: Agent 中间件与上下文增强
         scope:
             - backend/src/middlewares/
         source_files: []
@@ -63,15 +61,14 @@ modules:
         depends_on: []
         related_to: []
     backend/storage_layer:
-        dir_name: 多模态数据持久化层
-        title: 多模态数据持久化层
+        dir_name: 多模态存储基础设施
+        title: 多模态存储基础设施
         scope:
             - backend/src/storage/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: backend/document_parsing
+        related_to: []
     backend/tools_and_skills:
         dir_name: 智能体工具与技能执行引擎
         title: 智能体工具与技能执行引擎

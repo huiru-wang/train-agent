@@ -1,9 +1,8 @@
 schema_version: 1
 module_path: backend/storage_layer
-title: 多模态数据持久化层
+title: 多模态存储基础设施
 scope:
     - backend/src/storage/
 source_files: []
 depends_on: []
-related_to:
-    - path: backend/document_parsing
+related_to: []
