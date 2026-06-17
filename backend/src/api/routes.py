@@ -1,6 +1,7 @@
 import json
 import logging
 import shutil
+from mimetypes import guess_type
 from pathlib import Path
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
@@ -79,6 +80,10 @@ class UpdateThreadRequest(BaseModel):
 class UpdateConfigRequest(BaseModel):
     key: str
     value: str | int | float | bool | dict | list | None
+
+
+class SaveTaskFileRequest(BaseModel):
+    content: str
 
 
 @app.patch("/api/workspaces/{workspace_id}/thread")
@@ -211,6 +216,30 @@ async def delete_task(workspace_id: str, task_id: str):
     return {"ok": True, "deleted_ids": deleted_ids}
 
 
+@app.put("/api/workspaces/{workspace_id}/tasks/{task_id}/file")
+async def save_task_file(workspace_id: str, task_id: str, req: SaveTaskFileRequest):
+    """Save updated HTML content back to a PPT task's file."""
+    logger.info("[API] PUT /api/workspaces/%s/tasks/%s/file content_len=%d", workspace_id, task_id, len(req.content))
+    task = await db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    result_data = {}
+    if task.get("result_data"):
+        try:
+            result_data = json.loads(task["result_data"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+    file_path = result_data.get("file_path", "")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="File path not found in task result_data")
+    resolved = Path(file_path)
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    resolved.write_text(req.content, encoding="utf-8")
+    logger.info("[API] saved task file: %s (%d bytes)", file_path, len(req.content))
+    return {"ok": True}
+
+
 # --- File download ---
 
 
@@ -221,11 +250,15 @@ async def download_file(file_path: str):
     resolved = Path(file_path)
     if not resolved.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(
+    mime, _ = guess_type(str(resolved))
+    response = FileResponse(
         path=str(resolved),
         filename=resolved.name,
-        media_type="application/octet-stream",
+        media_type=mime or "application/octet-stream",
     )
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # --- Static assets for PPT skill ---

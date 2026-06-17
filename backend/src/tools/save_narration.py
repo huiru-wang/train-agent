@@ -116,7 +116,9 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         if not slides_list:
             return "错误：slides 列表为空。"
 
-        # Default voice from workspace config
+        # Default voice: prefer runtime state, then workspace config
+        if not voice:
+            voice = runtime.state.get("voice_id", "")
         if not voice:
             ws = await db.get_workspace(workspace_id)
             voice = (ws.get("ext_data", {}) or {}).get("voice_id", "Cherry")

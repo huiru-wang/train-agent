@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X, Check, ExternalLink } from "lucide-react";
+import { X, Check, ArrowLeft } from "lucide-react";
 
 export interface PptStyle {
   id: string;
@@ -28,6 +28,7 @@ export const PPT_STYLES: PptStyle[] = [
   { id: "terminal-green", name: "Terminal Green", cn: "终端黑客", vibe: "终端窗口 + 闪烁绿光标 + 扫描线，极客美学", file: "10-terminal-green.html", category: "specialty" },
   { id: "swiss-modern", name: "Swiss Modern", cn: "瑞士网格", vibe: "纯白黑红三色 + 可见十二列网格 + 不对称布局", file: "11-swiss-modern.html", category: "specialty" },
   { id: "paper-and-ink", name: "Paper & Ink", cn: "纸墨书香", vibe: "奶油纸质感 + 首字下沉 + 优雅横线分隔，文学气息", file: "12-paper-ink.html", category: "specialty" },
+  { id: "global-tech-blue", name: "Global Tech Blue", cn: "地球蓝", vibe: "专业、科技、全球化、商务清新；带有“互联网/AI/数字化”叙事感", file: "13-global-tech-blue.html", category: "specialty" },
 ];
 
 interface StylePickerDialogProps {
@@ -155,10 +156,9 @@ export function StylePickerDialog({
                               e.stopPropagation();
                               setPreviewStyle(style);
                             }}
-                            className="ml-2 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-all hover:text-foreground group-hover:opacity-100"
-                            title="全屏查看"
+                            className="ml-2 shrink-0 rounded-md bg-accent/15 px-2.5 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/25"
                           >
-                            <ExternalLink size={12} />
+                            预览模版
                           </button>
                         </div>
                       </div>
@@ -182,18 +182,29 @@ export function StylePickerDialog({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border px-5 py-3">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {previewStyle.cn}
-                </h3>
-                <span className="text-xs text-muted-foreground">
-                  {previewStyle.name}
-                </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setPreviewStyle(null)}
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <ArrowLeft size={14} />
+                  返回
+                </button>
+                <div className="h-4 w-px bg-border" />
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    {previewStyle.cn}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {previewStyle.name}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPreviewStyle(null)}
+                  onClick={onClose}
                   className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+                  title="关闭"
                 >
                   <X size={16} />
                 </button>

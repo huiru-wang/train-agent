@@ -211,3 +211,22 @@ export function deleteTask(workspaceId: string, taskId: string): Promise<{ ok: b
     method: "DELETE",
   });
 }
+
+export function saveTaskFile(
+  workspaceId: string,
+  taskId: string,
+  content: string
+): Promise<{ ok: boolean }> {
+  return request(`/api/workspaces/${workspaceId}/tasks/${taskId}/file`, {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}
+
+// --- Files ---
+
+export async function fetchFileContent(fileUrl: string): Promise<string> {
+  const response = await fetch(fileUrl);
+  if (!response.ok) throw new Error(`Failed to fetch file: ${response.status}`);
+  return response.text();
+}

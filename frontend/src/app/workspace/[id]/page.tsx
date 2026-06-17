@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Bot, Mic } from "lucide-react";
-import { getWorkspace, type Workspace } from "@/lib/api";
+import { getWorkspace, type Workspace, type Task } from "@/lib/api";
 import { ThreePanel } from "@/components/layout/three-panel";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentPanel } from "@/components/document/document-panel";
 import { TaskPanel } from "@/components/task/task-panel";
 import { ConfigPanel } from "@/components/config/config-panel";
+import { PPTPlayerDialog } from "@/components/player/ppt-player-dialog";
+import { PPTPreviewDialog } from "@/components/player/ppt-preview-dialog";
 import type { ExternalCommand } from "@/components/chat/assistant";
 
 export default function WorkspacePage() {
@@ -21,6 +23,8 @@ export default function WorkspacePage() {
   const [voiceId, setVoiceId] = useState("Cherry");
   const [currentPptTaskId, setCurrentPptTaskId] = useState("");
   const [externalCommand, setExternalCommand] = useState<ExternalCommand | null>(null);
+  const [playerData, setPlayerData] = useState<{ narrationTask: Task; pptTask: Task } | null>(null);
+  const [previewTask, setPreviewTask] = useState<Task | null>(null);
 
   useEffect(() => {
     getWorkspace(workspaceId)
@@ -58,6 +62,14 @@ export default function WorkspacePage() {
     setExternalCommand(null);
   }, []);
 
+  const handlePlayNarration = useCallback((narrationTask: Task, pptTask: Task) => {
+    setPlayerData({ narrationTask, pptTask });
+  }, []);
+
+  const handlePreview = useCallback((task: Task) => {
+    setPreviewTask(task);
+  }, []);
+
   if (!workspace) {
     return (
       <div className="flex h-screen items-center justify-center text-muted-foreground">
@@ -75,7 +87,7 @@ export default function WorkspacePage() {
         onConfigChange={handleConfigChange}
       />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <TaskPanel workspaceId={workspaceId} onNarrate={handleNarrate} />
+        <TaskPanel workspaceId={workspaceId} onNarrate={handleNarrate} onPlayNarration={handlePlayNarration} onPreview={handlePreview} />
       </div>
     </div>
   );
@@ -102,12 +114,31 @@ export default function WorkspacePage() {
       <div className="flex-1 overflow-hidden">
         <ThreePanel
           left={<DocumentPanel workspaceId={workspaceId} />}
-          center={<ChatPanel workspaceId={workspaceId} pptStyle={pptStyle} currentPptTaskId={currentPptTaskId} onPptTaskIdConsumed={handlePptTaskIdConsumed} externalCommand={externalCommand} onExternalCommandConsumed={handleExternalCommandConsumed} />}
+          center={<ChatPanel workspaceId={workspaceId} pptStyle={pptStyle} voiceId={voiceId} currentPptTaskId={currentPptTaskId} onPptTaskIdConsumed={handlePptTaskIdConsumed} externalCommand={externalCommand} onExternalCommandConsumed={handleExternalCommandConsumed} />}
           right={rightPanel}
           rightCollapsed={rightCollapsed}
           onRightToggle={() => setRightCollapsed((v) => !v)}
         />
       </div>
+
+      {/* PPT Player Dialog */}
+      {playerData && (
+        <PPTPlayerDialog
+          workspaceId={workspaceId}
+          narrationTask={playerData.narrationTask}
+          pptTask={playerData.pptTask}
+          onClose={() => setPlayerData(null)}
+        />
+      )}
+
+      {/* PPT Preview Dialog */}
+      {previewTask && (
+        <PPTPreviewDialog
+          workspaceId={workspaceId}
+          pptTask={previewTask}
+          onClose={() => setPreviewTask(null)}
+        />
+      )}
     </div>
   );
 }

@@ -6,8 +6,8 @@ import { X, Play, Pause } from "lucide-react";
 export interface Voice {
   id: string;
   name: string;
+  gender: string;
   trait: string;
-  languages: string[];
   audioUrl: string;
 }
 
@@ -16,9 +16,65 @@ export const VOICES: Voice[] = [
     id: "Cherry",
     name: "芊悦",
     trait: "阳光积极、亲切自然小姐姐",
-    languages: ["中文（普通话）", "英文"],
+    gender: "female",
     audioUrl:
       "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/tixcef/cherry.wav",
+  },
+  {
+    id: "Ethan",
+    name: "晨煦",
+    trait: "阳光、温暖、活力、朝气的男生",
+    gender: "male",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/emaqdp/ethan.wav",
+  },
+  {
+    id: "Chelsie",
+    name: "千雪",
+    trait: "二次元虚拟女友",
+    gender: "female",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/vnpxgw/chelsie.wav",
+  },
+  {
+    id: "Vivian",
+    name: "十三",
+    trait: "拽拽的、可爱的小暴躁",
+    gender: "female",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/eetwkj/Vivian.wav",
+  },
+  {
+    id: "Eldric Sage",
+    name: "沧明子",
+    trait: "沉稳睿智的老者",
+    gender: "male",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/hbvhwj/Eldric+Sage.wav",
+  },
+  {
+    id: "Vincent",
+    name: "田叔",
+    trait: "沙哑烟嗓",
+    gender: "male",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/skfrkq/Vincent.wav",
+  },
+  {
+    id: "Neil",
+    name: "阿闻",
+    trait: "专业的新闻主持人",
+    gender: "male",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/ucmfkt/Neil.wav",
+  },
+  {
+    id: "Bellona",
+    name: "燕铮莺",
+    trait: "声音洪亮、字正腔圆江湖",
+    gender: "female",
+    audioUrl:
+      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/wztwli/Bellona.wav",
   },
 ];
 
@@ -120,6 +176,9 @@ export function VoicePickerDialog({
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">
                         {voice.name}
+                        <span className="ml-1 text-xs font-normal text-muted-foreground">
+                          （{voice.gender === "female" ? "女性" : "男性"}）
+                        </span>
                       </span>
                       <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                         {voice.trait}

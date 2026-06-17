@@ -309,7 +309,6 @@ The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal c
 
 Summarize — Tell the user:
    - File location, style name, slide count
-   - Navigation: Arrow keys, Space, scroll/swipe, click nav dots
    - How to customize: `:root` CSS variables for colors, font link for typography, `.reveal` class for animations
    - Inline editing: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
 

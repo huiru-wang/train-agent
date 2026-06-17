@@ -66,6 +66,7 @@ export function useResume() {
 interface AssistantProps {
   workspaceId: string;
   pptStyle?: string;
+  voiceId?: string;
   currentPptTaskId?: string;
   onPptTaskIdConsumed?: () => void;
   externalCommand?: ExternalCommand | null;
@@ -73,7 +74,7 @@ interface AssistantProps {
   children: ReactNode;
 }
 
-export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskIdConsumed, externalCommand, onExternalCommandConsumed, children }: AssistantProps) {
+export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, onPptTaskIdConsumed, externalCommand, onExternalCommandConsumed, children }: AssistantProps) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [historyMessages, setHistoryMessages] = useState<any[]>([]);
   const [historyNextCursor, setHistoryNextCursor] = useState<number | null>(null);
@@ -248,6 +249,7 @@ export function Assistant({ workspaceId, pptStyle, currentPptTaskId, onPptTaskId
         messages: [{ type: "human", content }],
         workspace_id: workspaceId,
         ppt_style: pptStyle || "",
+        voice_id: voiceId || "",
         current_ppt_task_id: currentPptTaskId || "",
       },
       { config: { recursion_limit: 30 } },

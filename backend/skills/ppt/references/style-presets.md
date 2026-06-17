@@ -296,6 +296,42 @@ Curated visual styles for Frontend Slides. Each preset is inspired by real desig
 
 **Signature:** Drop caps, pull quotes, elegant horizontal rules
 
+### 13. Global Tech Blue
+
+**Vibe:** 专业、科技、全球化、商务清新；带有“互联网/AI/数字化”叙事感
+
+**Layout:** 
+- 封面/封底：全屏科技地球背景，标题居中，副标题与按钮居中对齐
+- 内容页：左上角轻量地球装饰，主体区域大量留白，采用卡片式信息堆叠
+- 目录页：左侧数字编号 + 右侧标题，强调步骤感与进度
+- 通用：圆角卡片承载核心信息，色块进度/徽章做层级区分
+
+**Typography:** 
+Display: Noto Sans SC（700/900）
+Body: Noto Sans SC（400/500）
+
+**Colors:**
+```css
+:root {
+    --bg-primary: #ffffff;
+    --bg-subtle: #f5f8fa;
+    --accent-blue: #3a7bff;
+    --accent-blue-soft: #4a90e2;
+    --accent-blue-light: #e6f2ff;
+    --accent-blue-pale: #b4d9ff;
+    --text-primary: #292929;
+    --text-secondary: #4a4a4a;
+    --text-muted: #6b7280;
+    --highlight-warm: #ffc000;
+}
+```
+
+**Signature Elements:**
+- 蓝色网络地球/球体，带连接节点与环绕弧线
+- 蓝色实心圆、空心同心圆、小箭头作为散点装饰
+- 浅蓝色波浪/弧线层叠，增加空间感
+- 圆角矩形卡片与按钮，常配蓝色填充或浅蓝描边
+
 ---
 
 ## Font Pairing Quick Reference
@@ -312,7 +348,7 @@ Curated visual styles for Frontend Slides. Each preset is inspired by real desig
 | Vintage Editorial | Fraunces | Work Sans | Google |
 | Neon Cyber | Clash Display | Satoshi | Fontshare |
 | Terminal Green | JetBrains Mono | JetBrains Mono | JetBrains |
-
+| Terminal Green | JetBrains Mono | JetBrains Mono | JetBrains |
 ---
 
 ## DO NOT USE (Generic AI Patterns)

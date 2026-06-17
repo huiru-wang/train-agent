@@ -56,13 +56,20 @@ fi
 # --- Start Backend API ---
 log "启动后端 API (port 8000)..."
 cd "$BACKEND"
-nohup uv run uvicorn src.api.routes:app --host 0.0.0.0 --port 8000 --reload --reload-exclude '.venv' > "$LOGS/backend.log" 2>&1 &
+nohup uv run uvicorn src.api.routes:app --host 0.0.0.0 --port 8000 \
+  --reload \
+  --reload-exclude '.venv' \
+  --reload-exclude 'data' \
+  --reload-exclude '.langgraph_api' \
+  --reload-exclude '__pycache__' \
+  > "$LOGS/backend.log" 2>&1 &
 echo $! > "$TMP/backend.pid"
 
 # --- Start LangGraph ---
 log "启动 LangGraph (port 2024)..."
 cd "$BACKEND"
-nohup env NO_COLOR=1 uv run langgraph dev --port 2024 --no-browser --no-reload > "$LOGS/langgraph.log" 2>&1 &
+nohup env FORCE_COLOR=0 NO_COLOR=1 UV_TERM=0 uv run langgraph dev --port 2024 --no-browser --no-reload \
+  2>&1 | sed $'s/\x1b\\[[0-9;]*[a-zA-Z]//g' | perl "$ROOT/scripts/utc2local.pl" > "$LOGS/langgraph.log" &
 echo $! > "$TMP/langgraph.pid"
 
 # --- Start Frontend ---

@@ -110,7 +110,7 @@ img, .image-container {
     }
 
     /* Hide non-essential elements */
-    .nav-dots, .keyboard-hint, .decorative {
+    .nav-dots, .decorative {
         display: none;
     }
 }

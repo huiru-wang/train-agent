@@ -13,12 +13,18 @@ import {
   Trash2,
   AlertCircle,
   ChevronRight,
+  Play,
+  Eye,
 } from "lucide-react";
 import { listTasks, deleteTask, type Task } from "@/lib/api";
+import { PPT_STYLES } from "@/components/config/style-picker-dialog";
+import { VOICES } from "@/components/config/voice-picker-dialog";
 
 interface TaskPanelProps {
   workspaceId: string;
   onNarrate?: (taskId: string, title: string) => void;
+  onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
+  onPreview?: (task: Task) => void;
 }
 
 const TYPE_CONFIG: Record<
@@ -69,7 +75,7 @@ const STATUS_CONFIG = {
   },
 } as const;
 
-export function TaskPanel({ workspaceId, onNarrate }: TaskPanelProps) {
+export function TaskPanel({ workspaceId, onNarrate, onPlayNarration, onPreview }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const fetchTasks = useCallback(async () => {
@@ -112,6 +118,8 @@ export function TaskPanel({ workspaceId, onNarrate }: TaskPanelProps) {
                 workspaceId={workspaceId}
                 onDeleted={fetchTasks}
                 onNarrate={onNarrate}
+                onPlayNarration={onPlayNarration}
+                onPreview={onPreview}
               />
             ))}
           </div>
@@ -126,9 +134,11 @@ interface TaskItemGroupProps {
   workspaceId: string;
   onDeleted: () => void;
   onNarrate?: (taskId: string, title: string) => void;
+  onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
+  onPreview?: (task: Task) => void;
 }
 
-function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate }: TaskItemGroupProps) {
+function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, onPreview }: TaskItemGroupProps) {
   const [expanded, setExpanded] = useState(true);
   const prevChildCount = useRef(task.children?.length ?? 0);
 
@@ -148,6 +158,7 @@ function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate }: TaskItemGrou
         workspaceId={workspaceId}
         onDeleted={onDeleted}
         onNarrate={onNarrate}
+        onPreview={onPreview}
         canExpand={hasChildren}
         expanded={expanded}
         onToggleExpand={() => setExpanded(!expanded)}
@@ -161,6 +172,8 @@ function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate }: TaskItemGrou
               task={child}
               workspaceId={workspaceId}
               onDeleted={onDeleted}
+              onPlayNarration={onPlayNarration}
+              parentTask={task}
             />
           ))}
         </div>
@@ -174,12 +187,15 @@ interface TaskItemProps {
   workspaceId: string;
   onDeleted: () => void;
   onNarrate?: (taskId: string, title: string) => void;
+  onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
+  onPreview?: (task: Task) => void;
+  parentTask?: Task;
   canExpand?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
 }
 
-function TaskItem({ task, workspaceId, onDeleted, onNarrate, canExpand, expanded, onToggleExpand }: TaskItemProps) {
+function TaskItem({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, onPreview, parentTask, canExpand, expanded, onToggleExpand }: TaskItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -206,12 +222,26 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, canExpand, expanded
 
   const hasDownload = task.status === "completed" && resultData?.file_path;
   const isPptCompleted = task.type === "ppt" && task.status === "completed";
+  const canPlay = task.type === "narration" && task.status === "completed" && !!onPlayNarration && !!parentTask;
+  const canPreview = task.type === "ppt" && task.status === "completed" && !!onPreview;
+
+  // Derive style/voice name for subtitle
+  const pptStyleName = task.type === "ppt" && resultData?.ppt_style
+    ? PPT_STYLES.find((s) => s.id === resultData.ppt_style)?.cn || resultData.ppt_style
+    : "";
+  const voiceName = task.type === "narration" && resultData?.voice
+    ? VOICES.find((v) => v.id === resultData.voice)?.name || resultData.voice
+    : "";
+
+  const handlePlay = () => {
+    if (canPlay) onPlayNarration!(task, parentTask!);
+  };
 
   const handleDownload = () => {
     if (resultData?.file_path) {
       const apiBase =
         process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-      const downloadUrl = `${apiBase}/api/files/${encodeURIComponent(resultData.file_path)}`;
+      const downloadUrl = `${apiBase}/api/files/${encodeURIComponent(resultData.file_path)}?t=${Date.now()}`;
       const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = resultData.filename || "download";
@@ -279,6 +309,8 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, canExpand, expanded
           </div>
           <p className="mt-0.5 text-[10px] text-muted-foreground">
             {typeConfig.label} · {statusLabel}
+            {pptStyleName && ` · （${pptStyleName}）`}
+            {voiceName && `（${voiceName}）`}
           </p>
           {task.status === "tts_failed" && resultData?.tts_error && (
             <p className="mt-0.5 text-[10px] text-orange-400">
@@ -286,6 +318,26 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, canExpand, expanded
             </p>
           )}
         </div>
+        {/* Play button for completed narration */}
+        {canPlay && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handlePlay(); }}
+            className="mt-0.5 flex-shrink-0 rounded p-1 text-accent/70 opacity-0 transition-all hover:text-accent group-hover:opacity-100"
+            title="播放 PPT"
+          >
+            <Play size={13} />
+          </button>
+        )}
+        {/* Preview button for completed PPT */}
+        {canPreview && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onPreview!(task); }}
+            className="mt-0.5 flex-shrink-0 rounded p-1 text-accent/70 opacity-0 transition-all hover:text-accent group-hover:opacity-100"
+            title="预览 PPT"
+          >
+            <Eye size={13} />
+          </button>
+        )}
         {/* More menu */}
         <div className="relative mt-0.5" ref={menuRef}>
           <button

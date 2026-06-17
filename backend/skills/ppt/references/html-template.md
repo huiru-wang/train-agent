@@ -185,8 +185,15 @@ Every presentation must include:
 4. **Inline Editing** (enabled by default unless the user explicitly asked for no editing controls or a smaller presentation-only file):
    - Edit toggle button (hidden by default, revealed via hover hotzone or `E` key)
    - Auto-save to localStorage
-   - Export/save file functionality
    - See "Inline Editing Implementation" section below
+
+### Prohibited UI Elements
+
+**Do NOT generate any of the following in the HTML output:**
+
+- **Keyboard hint / navigation hint overlay** (e.g. `← → 翻页`, `E 编辑`, `.keyboard-hint` class) — the presentation is embedded in an app with its own controls; in-page hints are redundant and visually noisy.
+- **Edit mode banner** (e.g. "编辑模式已开启") — edit state is already indicated by the toggle button and visual outlines on editable elements; a full-width banner is unnecessary.
+- **Export/save button** (e.g. "保存到文件") — the host app provides download functionality.
 
 ## Inline Editing Implementation (Default)
 
