@@ -4,7 +4,8 @@
 
 - [ ] OSS 支持：产出存储到 OSS，点击文件直接访问公开链接
 - [ ] 工具管理：异常处理与容错机制
-- [ ] 前端播放器组件
+- [x] 前端播放器组件
+- [ ] 支持：提供PPT文件，提取视觉风格，加入ppt风格模版
 
 ## 上下文管理优化
 
@@ -35,3 +36,38 @@
 3. [ ] 清晰架构（通用 Agent + SKILL 注入业务 + 定制 Tools，业务与 Agent 能力分离）
 4. [ ] 会话消息加载性能优化（tool_result 延迟加载）
 5. [ ] LangGraph 能力边界评估（提供了什么？缺什么？）
+
+
+## ppt风格提取
+
+1. ppt风格区分内置和自定义；
+2. ppt风格动态配置在服务端，用户自定义风格持久化存储；
+3. 前端实时获取可用风格。
+4. 将选中的风格以「用户偏好」的方式注入SystemPrompt，不再通过SKILL引用的方式提供给LLM。
+
+风格描述模版：
+```
+### N. Theme Name
+
+**Vibe:** 一句话氛围
+
+**Layout:** 典型版式说明
+
+**Typography:**
+- Display: `字体名` (字重)
+- Body: `字体名` (字重)
+
+**Colors:**
+```css
+:root {
+    --bg-primary: #xxx;
+    --accent-xxx: #xxx;
+    --text-primary: #xxx;
+}
+
+**Signature Elements:**
+- 标志性元素 1
+- 标志性元素 2
+
+```
+
