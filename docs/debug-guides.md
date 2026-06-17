@@ -76,4 +76,3 @@ curl -s -X POST "http://localhost:2024/threads/{thread_id}/runs" \
   -d '{"assistant_id":"train_agent","command":{"resume":{...}}}'
 # 后端通 → 问题在前端；后端不通 → 问题在后端
 ```
-HEREDOC; __aone_exit=$?; pwd -P > '/var/folders/hc/15n2_8n91r99sdjxcgdb82k80000gp/T/aone-copilot-cwd-1781237439751-3ssty93h5a1.txt' 2>/dev/null; exit $__aone_exit
