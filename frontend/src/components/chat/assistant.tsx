@@ -33,6 +33,7 @@ interface StreamContextValue {
   isLoadingOlderMessages: boolean;
   externalCommand: ExternalCommand | null;
   onExternalCommandConsumed?: () => void;
+  threadId: string | null;
 }
 
 const StreamContext = createContext<StreamContextValue>({
@@ -46,6 +47,7 @@ const StreamContext = createContext<StreamContextValue>({
   hasOlderMessages: false,
   isLoadingOlderMessages: false,
   externalCommand: null,
+  threadId: null,
 });
 
 export function useStreamContext() {
@@ -277,6 +279,7 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
         isLoadingOlderMessages,
         externalCommand: externalCommand ?? null,
         onExternalCommandConsumed,
+        threadId,
       }}
     >
       <ResumeContext.Provider value={handleResume}>

@@ -130,6 +130,15 @@ export function listThreadMessages(
   return request(`/api/threads/${encodeURIComponent(threadId)}/messages?${params.toString()}`);
 }
 
+export function getMessageDetail(
+  threadId: string,
+  messageId: string,
+): Promise<ThreadMessage> {
+  return request(
+    `/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`,
+  );
+}
+
 // --- Documents ---
 
 export interface Document {

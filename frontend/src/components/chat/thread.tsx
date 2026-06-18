@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useStreamContext, useResume } from "./assistant";
 import { ClarifyForm } from "./clarify-form";
+import { getMessageDetail } from "@/lib/api";
 
 // ============================================================
 // Helpers
@@ -164,8 +165,16 @@ export function Thread() {
   } = useStreamContext();
   const shouldStickToBottom = useRef(true);
   const historyPrependSnapshot = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
+  const initialScrollDone = useRef(false);
   const visibleMessages = messages.filter((message) => !isHiddenMessage(message));
   const hasMessages = visibleMessages.length > 0;
+
+  // Reset initial scroll flag when messages clear (e.g. workspace switch)
+  useEffect(() => {
+    if (visibleMessages.length === 0) {
+      initialScrollDone.current = false;
+    }
+  }, [visibleMessages.length]);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -176,6 +185,13 @@ export function Thread() {
       el.scrollTop =
         el.scrollHeight - prependSnapshot.scrollHeight + prependSnapshot.scrollTop;
       historyPrependSnapshot.current = null;
+      return;
+    }
+
+    // First load: jump to bottom instantly so user always sees latest messages
+    if (!initialScrollDone.current && visibleMessages.length > 0) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "instant" });
+      initialScrollDone.current = true;
       return;
     }
 
@@ -728,7 +744,10 @@ function ClarifyFormSummary({
   toolCall: ExtractedToolCall;
   result: any;
 }) {
+  const { threadId } = useStreamContext();
   const [expanded, setExpanded] = useState(false);
+  const [loadedResult, setLoadedResult] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const title = (toolCall.args as Record<string, unknown>)?.title as string || "信息收集";
   const fields = (toolCall.args as Record<string, unknown>)?.fields as Array<{
@@ -736,7 +755,23 @@ function ClarifyFormSummary({
     label: string;
   }> | undefined;
 
-  const resultText = extractToolResultText(result);
+  // Detect stripped content from list API
+  const needsLazyLoad = result && result.content === "" && !!result.id && !!threadId;
+
+  const resultText = loadedResult !== null ? loadedResult : extractToolResultText(result);
+
+  const handleToggle = async () => {
+    if (!expanded && needsLazyLoad && loadedResult === null) {
+      setLoading(true);
+      try {
+        const detail = await getMessageDetail(threadId!, result.id);
+        setLoadedResult(extractToolResultText(detail));
+      } catch { /* ignore */ }
+      setLoading(false);
+    }
+    setExpanded(!expanded);
+  };
+
   let userValues: Record<string, unknown> = {};
   try {
     userValues = JSON.parse(resultText);
@@ -782,7 +817,7 @@ function ClarifyFormSummary({
     <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground not-prose">
       <button
         type="button"
-        onClick={() => setExpanded(!expanded)}
+        onClick={handleToggle}
         className="flex w-full items-center gap-2 px-3 py-1.5 text-left cursor-pointer hover:bg-muted/40"
       >
         <span className="text-green-400">✓</span>
@@ -797,16 +832,25 @@ function ClarifyFormSummary({
       </button>
       {expanded && (
         <div className="border-t border-border/40 px-3 py-2 space-y-1.5">
-          {entries.map(({ label, value }) => (
-            <div key={label} className="flex items-start gap-2">
-              <span className="shrink-0 text-muted-foreground/70 min-w-[5rem]">
-                {label}:
-              </span>
-              <span className="text-foreground/90">
-                {Array.isArray(value) ? value.join("、") : String(value)}
-              </span>
+          {loading ? (
+            <div className="flex items-center gap-2 py-1 text-muted-foreground/60">
+              <Loader2 size={12} className="animate-spin" />
+              <span>加载中...</span>
             </div>
-          ))}
+          ) : entries.length === 0 ? (
+            <div className="text-muted-foreground/60">暂无数据</div>
+          ) : (
+            entries.map(({ label, value }) => (
+              <div key={label} className="flex items-start gap-2">
+                <span className="shrink-0 text-muted-foreground/70 min-w-[5rem]">
+                  {label}:
+                </span>
+                <span className="text-foreground/90">
+                  {Array.isArray(value) ? value.join("、") : String(value)}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -820,9 +864,12 @@ function ToolCallCard({
   toolCall: ExtractedToolCall;
   result: any;
 }) {
+  const { threadId } = useStreamContext();
   const name = toolCall.name;
   const isDone = !!result;
   const [expanded, setExpanded] = useState(false);
+  const [loadedResult, setLoadedResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   // clarify_form: 未完成时由 InterruptBlock 渲染交互式表单；已完成时显示只读摘要
   if (name === "clarify_form") {
@@ -830,7 +877,11 @@ function ToolCallCard({
     return <ClarifyFormSummary toolCall={toolCall} result={result} />;
   }
 
-  const context: ToolDisplayContext = { toolCall, result, isDone };
+  // Detect lazy-loadable result: backend stripped tool message content in list API
+  const needsLazyLoad = isDone && result && result.content === "" && !!result.id && !!threadId;
+  const effectiveResult = loadedResult ?? result;
+
+  const context: ToolDisplayContext = { toolCall, result: effectiveResult, isDone };
   const config = TOOL_DISPLAY_CONFIG[name] ?? DEFAULT_TOOL_DISPLAY;
   const expandable =
     typeof config.expandable === "function"
@@ -851,15 +902,25 @@ function ToolCallCard({
     );
   }
 
+  const handleToggle = async () => {
+    if (!expanded && needsLazyLoad && !loadedResult) {
+      setLoading(true);
+      try {
+        const detail = await getMessageDetail(threadId!, result.id);
+        setLoadedResult(detail);
+      } catch { /* ignore */ }
+      setLoading(false);
+    }
+    if (canExpand) setExpanded((value) => !value);
+  };
+
   return (
     <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/30 text-xs text-muted-foreground not-prose">
       <button
         type="button"
-        onClick={() => {
-          if (canExpand) setExpanded((value) => !value);
-        }}
-        disabled={!canExpand}
-        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${canExpand ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
+        onClick={handleToggle}
+        disabled={!canExpand && !needsLazyLoad}
+        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${canExpand || needsLazyLoad ? "cursor-pointer hover:bg-muted/40" : "cursor-default"
           }`}
       >
         <span className="text-green-400">✓</span>
@@ -878,7 +939,14 @@ function ToolCallCard({
         )}
       </button>
       {canExpand && expanded && (
-        <div className="border-t border-border/40 px-3 py-2">{details}</div>
+        <div className="border-t border-border/40 px-3 py-2">
+          {loading ? (
+            <div className="flex items-center gap-2 py-1 text-muted-foreground/60">
+              <Loader2 size={12} className="animate-spin" />
+              <span>加载中...</span>
+            </div>
+          ) : details}
+        </div>
       )}
     </div>
   );

@@ -342,7 +342,7 @@ class Database:
             [thread_id, oldest_turn_id],
         )
         rows = await cursor.fetchall()
-        messages = [self._message_row_to_dict(row) for row in rows]
+        messages = [self._message_row_to_dict(row, strip_tool_content=True) for row in rows]
 
         # Check whether there are older turns
         cursor = await self.connection.execute(
@@ -356,7 +356,12 @@ class Database:
             "next_cursor": int(oldest_turn_id) if has_more else None,
         }
 
-    def _message_row_to_dict(self, row: aiosqlite.Row) -> dict:
+    def _message_row_to_dict(self, row: aiosqlite.Row, *, strip_tool_content: bool = False) -> dict:
+        content = self._load_json(row["content"], "")
+        # Strip tool message content in list response to reduce payload size;
+        # content can be fetched individually via the detail endpoint.
+        if strip_tool_content and row["role"] == "tool":
+            content = ""
         return {
             "id": int(row["id"]),
             "thread_id": row["thread_id"],
@@ -364,7 +369,7 @@ class Database:
             "message_id": row["message_id"],
             "role": row["role"],
             "type": row["type"],
-            "content": self._load_json(row["content"], ""),
+            "content": content,
             "tool_calls": self._load_json(row["tool_calls"], []),
             "tool_call_id": row["tool_call_id"],
             "name": row["name"],
@@ -373,6 +378,18 @@ class Database:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
+
+    async def get_message_by_id(self, message_id: str, thread_id: str) -> dict | None:
+        """Fetch a single message by its message_id within the given thread."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT * FROM message WHERE message_id = ? AND thread_id = ?",
+            [message_id, thread_id],
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return self._message_row_to_dict(row)
 
     # --- Document ---
 

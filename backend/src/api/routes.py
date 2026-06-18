@@ -118,6 +118,19 @@ async def list_thread_messages(
     return await db.list_thread_messages(thread_id, limit=limit, before=before)
 
 
+@app.get("/api/threads/{thread_id}/messages/{message_id}")
+async def get_message_detail(thread_id: str, message_id: str):
+    logger.info(
+        "[API] GET /api/threads/%s/messages/%s",
+        thread_id,
+        message_id,
+    )
+    msg = await db.get_message_by_id(message_id, thread_id)
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return msg
+
+
 @app.delete("/api/workspaces/{workspace_id}")
 async def delete_workspace(workspace_id: str):
     logger.info("[API] DELETE /api/workspaces/%s", workspace_id)

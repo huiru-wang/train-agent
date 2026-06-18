@@ -9,11 +9,11 @@ from src.storage.database import Database
 logger = logging.getLogger(__name__)
 
 
-def create_inject_doc_context(db: Database):
+def context_inject_middleware(db: Database):
     """工厂函数，返回注入文档上下文的 dynamic_prompt middleware。"""
 
     @dynamic_prompt
-    async def inject_doc_context(request: ModelRequest) -> str:
+    async def inject_context(request: ModelRequest) -> str:
         workspace_id = request.state.get("workspace_id", "default")
         ppt_style = request.state.get("ppt_style", "")
         doc_summaries = []
@@ -70,19 +70,20 @@ def create_inject_doc_context(db: Database):
                     "children": children_text,
                 })
 
+        # 注入当前工作区的文档内容摘要
         prompt = SYSTEM_PROMPT
         if doc_summaries:
             summaries_text = "\n".join(f"- {s}" for s in doc_summaries)
             prompt += f"\n\n## 当前知识库文档摘要\n{summaries_text}"
 
-        # Inject user config preferences (PPT style)
+        # 注入用户配置偏好（PPT样式）
         if ppt_style:
             prompt += (
                 f"\n\n## 用户配置偏好\n"
                 f"- PPT视觉风格：{ppt_style}（用户已预选，生成PPT时直接使用该风格，跳过风格询问步骤）"
             )
 
-        # Inject PPT tasks metadata
+        # 注入当前工作区的PPT任务
         if ppt_tasks_info:
             rows = []
             for t in ppt_tasks_info:
@@ -109,4 +110,4 @@ def create_inject_doc_context(db: Database):
         )
         return prompt
 
-    return inject_doc_context
+    return inject_context

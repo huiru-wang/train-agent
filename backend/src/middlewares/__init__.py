@@ -2,7 +2,7 @@ import os
 
 from src.agent.message_history import MessageHistoryCallback, MessageHistoryMiddleware
 from src.app_context import AppContext
-from src.middlewares.inject_doc_context import create_inject_doc_context
+from src.middlewares.context_inject_middleware import context_inject_middleware
 from src.middlewares.logging_middlewares import (
     log_after_agent,
     log_after_model,
@@ -25,7 +25,7 @@ def create_middlewares(
         MessageHistoryMiddleware(message_history_callback),
         log_before_model,
         sanitize_model_request,
-        create_inject_doc_context(ctx.db),
+        context_inject_middleware(ctx.db),
         log_after_model,
         log_after_agent,
         TrainAgentSummarizationMiddleware(
