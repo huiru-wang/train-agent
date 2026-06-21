@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPT 技能 — 12 种风格预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+    --bg: #0f0f0f;
+    --card: #1a1a1a;
+    --card-hover: #222;
+    --text: #e8e4df;
+    --text-dim: #8a8580;
+    --accent: #00ffcc;
+    --border: rgba(255,255,255,0.08);
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+body {
+    background: var(--bg);
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--text);
+    min-height: 100vh;
+    padding: clamp(1.5rem, 4vw, 3rem);
+}
+
+/* Header */
+.header {
+    max-width: 1200px;
+    margin: 0 auto clamp(2rem, 4vw, 3rem);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+.header h1 {
+    font-size: clamp(1.5rem, 4vw, 3rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+.header h1 span { color: var(--accent); }
+.header .subtitle {
+    font-size: clamp(0.75rem, 1.2vw, 0.9rem);
+    color: var(--text-dim);
+    margin-top: 0.5rem;
+    line-height: 1.5;
+}
+.header .count {
+    font-size: clamp(2rem, 5vw, 4rem);
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+/* Grid */
+.grid {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+    gap: clamp(0.75rem, 1.5vw, 1.25rem);
+}
+
+/* Card */
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: all 0.4s var(--ease);
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    position: relative;
+}
+.card:hover {
+    background: var(--card-hover);
+    border-color: rgba(255,255,255,0.15);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+}
+
+/* Card preview thumbnail */
+.card-preview {
+    height: 160px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: height 0.4s var(--ease);
+}
+.card:hover .card-preview { height: 180px; }
+
+/* Mini style previews */
+.preview-bold-signal { background: linear-gradient(135deg, #1a1a1a, #2d2d2d); }
+.preview-bold-signal::after { content: ''; width: 50px; height: 50px; background: #FF5722; border-radius: 12px; box-shadow: 0 0 30px rgba(255,87,34,0.4); }
+
+.preview-electric-studio { background: linear-gradient(to bottom, #ffffff 50%, #4361ee 50%); }
+.preview-electric-studio::after { content: ''; width: 40px; height: 4px; background: #4361ee; position: absolute; top: 50%; transform: translateY(-2px); }
+
+.preview-creative-voltage { background: linear-gradient(to right, #0066ff 50%, #1a1a2e 50%); }
+.preview-creative-voltage::after { content: ''; width: 40px; height: 20px; background: #d4ff00; border-radius: 100px; box-shadow: 0 0 20px rgba(212,255,0,0.5); }
+
+.preview-dark-botanical { background: radial-gradient(circle at 30% 50%, rgba(212,165,116,0.15), transparent), radial-gradient(circle at 70% 50%, rgba(232,180,184,0.1), transparent), #0f0f0f; }
+.preview-dark-botanical::after { content: ''; width: 1px; height: 60px; background: linear-gradient(to bottom, transparent, #d4a574, transparent); }
+
+.preview-notebook-tabs { background: #2d2d2d; padding-right: 30px; }
+.preview-notebook-tabs::before { content: ''; position: absolute; top: 10%; bottom: 10%; right: 0; width: 25px; background: linear-gradient(to bottom, #98d4bb 0% 20%, #c7b8ea 20% 45%, #f4b8c5 45% 70%, #a8d8ea 70% 90%, #ffe6a7 90%); border-radius: 0 6px 6px 0; }
+.preview-notebook-tabs::after { content: ''; width: 120px; height: 70px; background: #f8f6f1; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+
+.preview-pastel-geometry { background: #c8d9e6; }
+.preview-pastel-geometry::after { content: ''; width: 80px; height: 60px; background: #faf9f7; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+
+.preview-split-pastel { background: linear-gradient(to right, #f5e6dc 50%, #e4dff0 50%); }
+.preview-split-pastel::after { content: ''; width: 40px; height: 40px; background: #c8f0d8; border-radius: 100px; }
+
+.preview-vintage-editorial { background: #f5f3ee; }
+.preview-vintage-editorial::after { content: ''; width: 50px; height: 50px; border: 2px solid #1a1a1a; border-radius: 50%; }
+
+.preview-neon-cyber { background: #0a0f1c; }
+.preview-neon-cyber::after { content: ''; width: 60px; height: 60px; border: 2px solid #00ffcc; border-radius: 8px; box-shadow: 0 0 20px rgba(0,255,204,0.4); }
+
+.preview-terminal-green { background: #0d1117; }
+.preview-terminal-green::after { content: '> _'; font-family: monospace; color: #39d353; font-size: 1.5rem; font-weight: 700; text-shadow: 0 0 10px rgba(57,211,83,0.5); }
+
+.preview-swiss-modern { background: #ffffff; }
+.preview-swiss-modern::after { content: ''; width: 40px; height: 40px; background: #ff3300; }
+
+.preview-paper-ink { background: #faf9f7; }
+.preview-paper-ink::after { content: 'E'; font-family: 'Cormorant Garamond', Georgia, serif; font-size: 3rem; font-weight: 700; color: #c41e3a; font-style: italic; }
+
+/* Card info */
+.card-info {
+    padding: clamp(0.75rem, 1.5vw, 1.25rem);
+}
+.card-num {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+}
+.card-title {
+    font-size: clamp(0.95rem, 1.5vw, 1.1rem);
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+}
+.card-desc {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+.card-tags {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+.card-tag {
+    font-size: 0.65rem;
+    padding: 0.2em 0.6em;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+}
+
+/* Category labels */
+.category {
+    max-width: 1200px;
+    margin: clamp(1.5rem, 3vw, 2.5rem) auto clamp(0.75rem, 1.5vw, 1rem);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Footer */
+.footer {
+    max-width: 1200px;
+    margin: clamp(2rem, 4vw, 3rem) auto 0;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>PPT 风格 <span>预览库</span></h1>
+        <p class="subtitle">12 种精心设计的视觉风格 · 点击任意卡片查看完整预览</p>
+    </div>
+    <div class="count">12</div>
+</div>
+
+<div class="category">暗色系 · Dark Themes</div>
+<div class="grid">
+    <a href="01-bold-signal.html" class="card">
+        <div class="card-preview preview-bold-signal"></div>
+        <div class="card-info">
+            <div class="card-num">01 / 暗色</div>
+            <div class="card-title">浓烈信号</div>
+            <div class="card-desc">暗色渐变底 + 醒目色卡 + 巨大序号，视觉冲击拉满。</div>
+            <div class="card-tags">
+                <span class="card-tag">Archivo Black</span>
+                <span class="card-tag">#FF5722</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="02-electric-studio.html" class="card">
+        <div class="card-preview preview-electric-studio"></div>
+        <div class="card-info">
+            <div class="card-num">02 / 暗色</div>
+            <div class="card-title">电光蓝白</div>
+            <div class="card-desc">上下蓝白分屏，以引用排版为视觉焦点，干净利落。</div>
+            <div class="card-tags">
+                <span class="card-tag">Manrope</span>
+                <span class="card-tag">#4361ee</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="03-creative-voltage.html" class="card">
+        <div class="card-preview preview-creative-voltage"></div>
+        <div class="card-info">
+            <div class="card-num">03 / 暗色</div>
+            <div class="card-title">霓虹电压</div>
+            <div class="card-desc">电光蓝与暗色左右分屏，霓虹黄高亮 + 半调纹理。</div>
+            <div class="card-tags">
+                <span class="card-tag">Syne</span>
+                <span class="card-tag">#d4ff00</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="04-dark-botanical.html" class="card">
+        <div class="card-preview preview-dark-botanical"></div>
+        <div class="card-info">
+            <div class="card-num">04 / 暗色</div>
+            <div class="card-title">夜花秘境</div>
+            <div class="card-desc">暗底 + 暖色柔光球 + 优雅衬线斜体，静谧高级。</div>
+            <div class="card-tags">
+                <span class="card-tag">Cormorant</span>
+                <span class="card-tag">#d4a574</span>
+            </div>
+        </div>
+    </a>
+</div>
+
+<div class="category">亮色系 · Light Themes</div>
+<div class="grid">
+    <a href="05-notebook-tabs.html" class="card">
+        <div class="card-preview preview-notebook-tabs"></div>
+        <div class="card-info">
+            <div class="card-num">05 / 亮色</div>
+            <div class="card-title">活页便签</div>
+            <div class="card-desc">奶白纸卡 + 右侧彩色标签 + 左侧活页孔，编辑质感。</div>
+            <div class="card-tags">
+                <span class="card-tag">Bodoni Moda</span>
+                <span class="card-tag">Tabs</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="06-pastel-geometry.html" class="card">
+        <div class="card-preview preview-pastel-geometry"></div>
+        <div class="card-info">
+            <div class="card-num">06 / 亮色</div>
+            <div class="card-title">马卡龙药丸</div>
+            <div class="card-desc">柔和粉彩底 + 圆角白卡 + 右侧竖排彩色药丸标签。</div>
+            <div class="card-tags">
+                <span class="card-tag">Plus Jakarta Sans</span>
+                <span class="card-tag">Pastel</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="07-split-pastel.html" class="card">
+        <div class="card-preview preview-split-pastel"></div>
+        <div class="card-info">
+            <div class="card-num">07 / 亮色</div>
+            <div class="card-title">蜜桃薰衣草</div>
+            <div class="card-desc">蜜桃/薰衣草左右分屏 + 可爱圆角徽章 + 网格纹理。</div>
+            <div class="card-tags">
+                <span class="card-tag">Outfit</span>
+                <span class="card-tag">Split BG</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="08-vintage-editorial.html" class="card">
+        <div class="card-preview preview-vintage-editorial"></div>
+        <div class="card-info">
+            <div class="card-num">08 / 亮色</div>
+            <div class="card-title">复古铅字</div>
+            <div class="card-desc">奶油底色 + 几何线条装饰 + 粗边框按钮，老派印刷感。</div>
+            <div class="card-tags">
+                <span class="card-tag">Fraunces</span>
+                <span class="card-tag">#f5f3ee</span>
+            </div>
+        </div>
+    </a>
+</div>
+
+<div class="category">特殊主题 · Specialty Themes</div>
+<div class="grid">
+    <a href="09-neon-cyber.html" class="card">
+        <div class="card-preview preview-neon-cyber"></div>
+        <div class="card-info">
+            <div class="card-num">09 / 特殊</div>
+            <div class="card-title">霓虹赛博</div>
+            <div class="card-desc">深空蓝底 + 粒子动画 + 青色/品红霓虹光晕。</div>
+            <div class="card-tags">
+                <span class="card-tag">Clash Display</span>
+                <span class="card-tag">#00ffcc</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="10-terminal-green.html" class="card">
+        <div class="card-preview preview-terminal-green"></div>
+        <div class="card-info">
+            <div class="card-num">10 / 特殊</div>
+            <div class="card-title">终端黑客</div>
+            <div class="card-desc">终端窗口 + 闪烁绿光标 + 扫描线，极客美学。</div>
+            <div class="card-tags">
+                <span class="card-tag">JetBrains Mono</span>
+                <span class="card-tag">#39d353</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="11-swiss-modern.html" class="card">
+        <div class="card-preview preview-swiss-modern"></div>
+        <div class="card-info">
+            <div class="card-num">11 / 特殊</div>
+            <div class="card-title">瑞士网格</div>
+            <div class="card-desc">纯白黑红三色 + 可见十二列网格 + 不对称布局。</div>
+            <div class="card-tags">
+                <span class="card-tag">Archivo</span>
+                <span class="card-tag">#ff3300</span>
+            </div>
+        </div>
+    </a>
+
+    <a href="12-paper-ink.html" class="card">
+        <div class="card-preview preview-paper-ink"></div>
+        <div class="card-info">
+            <div class="card-num">12 / 特殊</div>
+            <div class="card-title">纸墨书香</div>
+            <div class="card-desc">奶油纸质感 + 首字下沉 + 优雅横线分隔，文学气息。</div>
+            <div class="card-tags">
+                <span class="card-tag">Cormorant Garamond</span>
+                <span class="card-tag">#c41e3a</span>
+            </div>
+        </div>
+    </a>
+</div>
+
+<div class="footer">
+    前端幻灯片 · 12 种风格预设 · 每个预览页均为自包含 HTML 文件
+</div>
+
+</body>
+</html>

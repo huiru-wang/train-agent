@@ -1,12 +1,10 @@
 """Dependency injection for API routes."""
 
-import os
-
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 
 from src.app_context import AppContext
-from src.services.doc_service import DocService
+from src.managers.doc_manager import DocManager
+from src.managers.style_extract_manager import StyleExtractManager
 
 load_dotenv()
 
@@ -18,12 +16,8 @@ vector_store = app_ctx.vector_store
 file_store = app_ctx.file_store
 skill_manager = app_ctx.skill_manager
 
-llm = ChatOpenAI(
-    model=os.getenv("SUMMARIZATION_MODEL"),
-    api_key=os.getenv("SUMMARIZATION_API_KEY"),
-    base_url=os.getenv("SUMMARIZATION_API_BASE"),
+doc_service = DocManager(
+    db=db, vector_store=vector_store, file_store=file_store
 )
 
-doc_service = DocService(
-    db=db, vector_store=vector_store, file_store=file_store, llm=llm
-)
+style_extract_manager = StyleExtractManager(db=db, file_store=file_store)

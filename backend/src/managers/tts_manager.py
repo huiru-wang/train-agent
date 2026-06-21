@@ -1,5 +1,6 @@
-"""TTS (Text-to-Speech) service for generating audio from narration text."""
+"""TTS (Text-to-Speech) manager for generating audio from narration text."""
 
+import base64
 import logging
 import os
 
@@ -8,7 +9,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-class TTSServiceError(Exception):
+class TTSManagerError(Exception):
     """Raised when TTS API call fails."""
 
     def __init__(self, status_code: int, message: str):
@@ -16,7 +17,7 @@ class TTSServiceError(Exception):
         super().__init__(f"TTS API error ({status_code}): {message}")
 
 
-class TTSService:
+class TTSManager:
     """Wraps the Dashscope TTS HTTP API for speech synthesis."""
 
     def __init__(self):
@@ -39,11 +40,11 @@ class TTSService:
             Raw audio bytes (mp3/wav).
 
         Raises:
-            TTSServiceError: If the API call fails.
+            TTSManagerError: If the API call fails.
             RuntimeError: If TTS is not configured.
         """
         if not self.is_configured:
-            raise RuntimeError("TTS service not configured: missing TTS_API_BASE or TTS_API_KEY")
+            raise RuntimeError("TTS manager not configured: missing TTS_API_BASE or TTS_API_KEY")
 
         payload = {
             "model": self.model,
@@ -68,7 +69,7 @@ class TTSService:
             if response.status_code != 200:
                 error_msg = response.text[:500]
                 logger.error("[TTS] API error: status=%d, body=%s", response.status_code, error_msg)
-                raise TTSServiceError(response.status_code, error_msg)
+                raise TTSManagerError(response.status_code, error_msg)
 
             # The API returns audio data directly or wrapped in JSON
             content_type = response.headers.get("content-type", "")
@@ -88,18 +89,23 @@ class TTSService:
                     if audio_url:
                         logger.info("[TTS] downloading audio from URL: %s", audio_url[:120])
                         dl_resp = await client.get(audio_url)
+                        if dl_resp.status_code != 200:
+                            raise TTSManagerError(
+                                dl_resp.status_code,
+                                f"Audio download failed: {dl_resp.text[:200]}",
+                            )
                         audio_bytes = dl_resp.content
+                        if not audio_bytes:
+                            raise TTSManagerError(200, "Audio download returned empty content")
                     else:
                         audio_b64 = audio_info.get("data", "")
                         if not audio_b64:
-                            raise TTSServiceError(200, "No audio data in response")
-                        import base64
+                            raise TTSManagerError(200, "No audio data in response")
                         audio_bytes = base64.b64decode(audio_b64)
                 else:
                     # Streaming or other format: treat as base64 string
                     if not audio_info:
-                        raise TTSServiceError(200, "No audio data in response")
-                    import base64
+                        raise TTSManagerError(200, "No audio data in response")
                     audio_bytes = base64.b64decode(audio_info)
 
         logger.info("[TTS] synthesized: %d bytes", len(audio_bytes))

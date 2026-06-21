@@ -4,6 +4,6 @@ from langchain.agents import AgentState
 class TrainAgentState(AgentState):
     """Extended agent state with workspace context."""
     workspace_id: str
-    ppt_style: str  # Pre-selected PPT visual style (e.g. "swiss-modern", "bold-signal")
-    voice_id: str  # Pre-selected TTS voice ID (e.g. "Cherry", "Ethan")
-    current_ppt_task_id: str  # PPT task ID for narration generation (empty when not narrating)
+    ppt_style: str  # 当前选中的PPT风格
+    voice_id: str  # 当前选中的TTS声音
+    current_ppt_task_id: str  # 当前正在处理的PPT任务ID

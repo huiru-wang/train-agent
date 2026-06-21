@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>瑞士网格 — 风格预览</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;700;800;900&family=Nunito:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* === VIEWPORT BASE === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow-x: hidden; }
+.slide { width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; position: relative; }
+:root {
+    --title-size: clamp(2rem, 6vw, 5rem);
+    --h2-size: clamp(1.25rem, 3vw, 2rem);
+    --body-size: clamp(0.75rem, 1.3vw, 1rem);
+    --small-size: clamp(0.65rem, 1vw, 0.875rem);
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (max-height: 600px) { :root { --title-size: clamp(1.5rem, 4vw, 2.5rem); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; } }
+
+/* === SWISS MODERN THEME === */
+:root {
+    --bg-white: #ffffff;
+    --bg-black: #000000;
+    --accent-red: #ff3300;
+    --text-dark: #0a0a0a;
+    --text-light: #ffffff;
+    --grid-line: rgba(0,0,0,0.06);
+    --font-display: 'Archivo', sans-serif;
+    --font-body: 'Nunito', sans-serif;
+}
+
+body { background: var(--bg-white); font-family: var(--font-body); color: var(--text-dark); }
+
+/* Visible grid */
+.swiss-grid {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    pointer-events: none;
+}
+.swiss-grid > div {
+    border-left: 1px solid var(--grid-line);
+    height: 100%;
+}
+
+/* Layout: asymmetric */
+.layout {
+    position: relative;
+    height: 100%;
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    grid-template-rows: auto 1fr auto;
+    padding: clamp(1rem, 3vw, 2.5rem);
+    gap: clamp(1rem, 2vw, 2rem);
+    z-index: 2;
+}
+
+/* Top bar */
+.top-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: clamp(0.5rem, 1vw, 1rem);
+    border-bottom: 2px solid var(--text-dark);
+}
+.top-bar .brand {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: var(--small-size);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+.top-bar .brand .red { color: var(--accent-red); }
+.top-bar .meta {
+    font-size: var(--small-size);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Left column */
+.col-left {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-right: clamp(0.5rem, 2vw, 2rem);
+    border-right: 1px solid var(--grid-line);
+}
+.section-num {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: clamp(3rem, 8vw, 7rem);
+    line-height: 0.85;
+    color: var(--accent-red);
+    margin-bottom: clamp(0.5rem, 1vw, 0.75rem);
+}
+.section-label {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--small-size);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-dark);
+    margin-bottom: clamp(0.5rem, 1vw, 1rem);
+}
+
+/* Red rectangle accent */
+.red-block {
+    width: clamp(40px, 5vw, 60px);
+    height: clamp(40px, 5vw, 60px);
+    background: var(--accent-red);
+    margin-top: clamp(0.5rem, 1vw, 1rem);
+}
+
+/* Right column */
+.col-right {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.col-right h1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: var(--title-size);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    margin-bottom: clamp(0.5rem, 1.5vw, 1rem);
+    text-transform: uppercase;
+}
+.col-right h1 .outline {
+    -webkit-text-stroke: 2px var(--text-dark);
+    -webkit-text-fill-color: transparent;
+}
+.col-right p {
+    font-size: var(--body-size);
+    line-height: 1.6;
+    color: #555;
+    max-width: 400px;
+    margin-bottom: clamp(0.5rem, 1vw, 1rem);
+}
+
+/* Principle list */
+.principles {
+    list-style: none;
+    border-top: 1px solid var(--grid-line);
+    margin-top: clamp(0.5rem, 1vw, 0.75rem);
+}
+.principles li {
+    display: grid;
+    grid-template-columns: 2em 1fr auto;
+    align-items: center;
+    padding: clamp(0.3rem, 0.8vw, 0.6rem) 0;
+    border-bottom: 1px solid var(--grid-line);
+    font-size: var(--body-size);
+    gap: 0.5em;
+}
+.principles .pnum { font-family: var(--font-display); font-weight: 700; color: var(--accent-red); }
+.principles .pname { font-weight: 600; }
+.principles .pdesc { font-size: var(--small-size); color: #999; }
+
+/* Bottom bar */
+.bottom-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--small-size);
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding-top: clamp(0.5rem, 1vw, 0.75rem);
+}
+
+/* Circle accent */
+.circle-accent {
+    position: absolute;
+    width: clamp(60px, 8vw, 100px);
+    height: clamp(60px, 8vw, 100px);
+    border: 3px solid var(--text-dark);
+    border-radius: 50%;
+    top: clamp(3rem, 8vh, 5rem);
+    right: clamp(4rem, 10vw, 8rem);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Animations */
+.reveal { opacity: 0; transform: translateY(25px); transition: opacity 0.6s var(--ease-out-expo), transform 0.6s var(--ease-out-expo); }
+.visible .reveal:nth-child(1) { transition-delay: 0.1s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(2) { transition-delay: 0.2s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(3) { transition-delay: 0.3s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(4) { transition-delay: 0.4s; opacity: 1; transform: translateY(0); }
+.visible .reveal:nth-child(5) { transition-delay: 0.5s; opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<section class="slide" id="slide1">
+    <!-- Visible 12-column grid -->
+    <div class="swiss-grid">
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+    </div>
+
+    <div class="circle-accent"></div>
+
+    <div class="layout">
+        <div class="top-bar reveal">
+            <span class="brand">瑞士 <span class="red">/</span> 网格</span>
+            <span class="meta">宣言 · 01 / 01</span>
+        </div>
+
+        <!-- Left -->
+        <div class="col-left">
+            <div class="section-num reveal">01</div>
+            <div class="section-label reveal">设计原则</div>
+            <div class="red-block reveal"></div>
+        </div>
+
+        <!-- Right -->
+        <div class="col-right">
+            <h1 class="reveal">形式<br><span class="outline">追随</span><br>功能</h1>
+            <p class="reveal">好的设计，是尽可能少的设计。更少，但更好。</p>
+            <ul class="principles reveal">
+                <li><span class="pnum">01</span><span class="pname">清晰</span><span class="pdesc">删除多余</span></li>
+                <li><span class="pnum">02</span><span class="pname">层级</span><span class="pdesc">对比产生秩序</span></li>
+                <li><span class="pnum">03</span><span class="pname">网格</span><span class="pdesc">结构带来自由</span></li>
+                <li><span class="pnum">04</span><span class="pname">一致性</span><span class="pdesc">重复有效的</span></li>
+            </ul>
+        </div>
+
+        <div class="bottom-bar reveal">
+            <span>包豪斯 · 赫尔维提卡传统</span>
+            <span>Archivo 800 + Nunito 400</span>
+        </div>
+    </div>
+</section>
+
+<script>
+if (location.search.includes('thumb')) {
+    document.querySelectorAll('.slide').forEach(s => s.classList.add('visible'));
+} else {
+    const obs = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('.slide').forEach(s => obs.observe(s));
+}
+</script>
+</body>
+</html>

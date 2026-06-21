@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Awaitable, Callable
 
-from langchain.agents.middleware import ModelRequest, ModelResponse, wrap_model_call
+from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResponse
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 
 logger = logging.getLogger(__name__)
@@ -102,20 +102,22 @@ def sanitize_model_messages(messages: list[BaseMessage]) -> list[BaseMessage]:
     return sanitized
 
 
-@wrap_model_call
-async def sanitize_model_request(
-    request: ModelRequest,
-    handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
-) -> ModelResponse:
+class ModelMessageSanitizerMiddleware(AgentMiddleware):
     """Keep persisted history compatible with the configured chat model."""
-    sanitized = sanitize_model_messages(request.messages)
 
-    if any(before is not after for before, after in zip(request.messages, sanitized)):
-        logger.info(
-            "[Middleware] sanitize_model_request | workspace=%s | message_count=%d",
-            request.state.get("workspace_id", "default"),
-            len(request.messages),
-        )
-        request = request.override(messages=sanitized)
+    async def awrap_model_call(
+        self,
+        request: ModelRequest,
+        handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
+    ) -> ModelResponse:
+        sanitized = sanitize_model_messages(request.messages)
 
-    return await handler(request)
+        if any(before is not after for before, after in zip(request.messages, sanitized)):
+            logger.info(
+                "[Middleware] sanitize_model_request | workspace=%s | message_count=%d",
+                request.state.get("workspace_id", "default"),
+                len(request.messages),
+            )
+            request = request.override(messages=sanitized)
+
+        return await handler(request)

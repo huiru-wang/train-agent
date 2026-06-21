@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from langchain.tools import tool, ToolRuntime
 
@@ -8,6 +9,25 @@ from src.storage.database import Database
 from src.storage.file_store import FileStore
 
 logger = logging.getLogger(__name__)
+
+# Patterns for RAG source attribution markers that must not appear in PPT HTML
+_REF_PATTERNS = [
+    # {{ref:filename|chapter}} or {ref:filename|chapter}
+    re.compile(r'\{1,2\s*ref:[^}]*\}{1,2}'),
+    # ref:filename|chapter (standalone, e.g. in slide text)
+    re.compile(r'ref:[^\s<>"]+\|[^\s<>"]+'),
+    # [片段N] prefix from RAG tool output
+    re.compile(r'\[片段\d+\]\s*'),
+    # 📄 filename | location (source header from RAG tool)
+    re.compile(r'📄\s*[^|\n<]+\|\s*[^\n<]+'),
+]
+
+
+def _strip_ref_markers(html: str) -> str:
+    """Remove RAG source attribution markers from HTML content as a safety net."""
+    for pattern in _REF_PATTERNS:
+        html = pattern.sub('', html)
+    return html
 
 
 async def save_ppt_artifact(
@@ -31,6 +51,12 @@ async def save_ppt_artifact(
     logger.info("[save_ppt] task created: id=%s, title=%s", task["id"], title)
 
     try:
+        # Safety net: strip RAG source attribution markers that must not appear in PPT HTML
+        cleaned = _strip_ref_markers(content)
+        if cleaned != content:
+            logger.warning("[save_ppt] stripped RAG reference markers from HTML content")
+            content = cleaned
+
         content_bytes = content.encode("utf-8")
         file_path = await file_store.save_async(
             workspace_id,

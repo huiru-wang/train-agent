@@ -21,22 +21,23 @@ Train Agent 前端是一个基于 **Next.js (App Router)** 的单页应用，提
 │  │  │ 文档面板  │  │     聊天面板        │  │  配置 + 产出面板 │ │   │
 │  │  │          │  │                    │  │                  │ │   │
 │  │  │ 上传文档  │  │  流式对话          │  │  PPT 风格选择    │ │   │
-│  │  │ 文档列表  │  │  工具调用展示      │  │  音色选择        │ │   │
-│  │  │ 状态追踪  │  │  表单中断交互      │  │  PPT / 口播稿    │ │   │
-│  │  │          │  │  Markdown 渲染     │  │  预览 / 播放     │ │   │
-│  │  │          │  │  消息历史分页       │  │  父子层级展示    │ │   │
+│  │  │ 文档列表  │  │  工具调用展示      │  │  风格提取        │ │   │
+│  │  │ 状态追踪  │  │  表单中断交互      │  │  音色选择        │ │   │
+│  │  │          │  │  Markdown 渲染     │  │  PPT / 口播稿    │ │   │
+│  │  │          │  │  消息历史分页       │  │  预览 / 播放     │ │   │
+│  │  │          │  │                    │  │  父子层级展示    │ │   │
 │  │  └──────────┘  └────────────────────┘  └──────────────────┘ │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
-│  弹窗层: PPTPreviewDialog (预览/编辑) | PPTPlayerDialog (播放)       │
+│  弹窗层: PPTPreviewDialog | PPTPlayerDialog | StyleExtractionDialog │
 │                                                                     │
 │        REST API (:8000)                LangGraph Stream (:2024)      │
-│        ↕ 工作区/文档/任务/消息 CRUD     ↕ Agent 流式对话              │
+│        ↕ 工作区/文档/任务/消息/风格    ↕ Agent 流式对话              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **前端同时与两个后端服务通信**：
-- **FastAPI (:8000)**：通过 REST API 管理工作区、文档上传/删除、任务查询、消息历史、配置更新
+- **FastAPI (:8000)**：通过 REST API 管理工作区、文档上传/删除、任务查询、消息历史、配置更新、PPT 风格管理、风格提取
 - **LangGraph (:2024)**：通过 `@langchain/react` 的 `useStream` hook 进行流式 Agent 对话
 
 ---
@@ -83,9 +84,11 @@ frontend/
     │   │   ├── thread.tsx       #     对话线程（消息渲染 + 输入框）
     │   │   └── clarify-form.tsx #     Agent 表单中断 UI
     │   ├── config/              #   配置组件
-    │   │   ├── config-panel.tsx #     配置面板（风格 + 音色入口）
-    │   │   ├── style-picker-dialog.tsx # PPT 风格选择弹窗（12 种预设）
-    │   │   └── voice-picker-dialog.tsx # TTS 音色选择弹窗（含试听）
+    │   │   ├── config-panel.tsx #     配置面板（风格 + 音色 + 风格提取入口）
+    │   │   ├── style-picker-dialog.tsx       # PPT 风格选择弹窗（API 加载，分类展示）
+    │   │   ├── style-extraction-dialog.tsx   # 风格提取进度弹窗（步骤可视化）
+    │   │   ├── style-extraction-upload-dialog.tsx # PPTX 上传入口弹窗
+    │   │   └── voice-picker-dialog.tsx       # TTS 音色选择弹窗（含试听）
     │   ├── document/            #   文档管理组件
     │   │   └── document-panel.tsx #   文档面板（上传 + 列表 + 状态）
     │   ├── layout/              #   布局组件
@@ -154,6 +157,7 @@ frontend/
 />
 {playerData && <PPTPlayerDialog ... />}
 {previewTask && <PPTPreviewDialog ... />}
+{extractionTaskId && <StyleExtractionDialog ... />}
 ```
 
 **关键状态**：
@@ -162,6 +166,7 @@ frontend/
 - `externalCommand`：通过 ExternalCommand 机制向聊天面板注入 slash command（如 `/narrate`）
 - `playerData`：打开 PPT 播放器弹窗
 - `previewTask`：打开 PPT 预览/编辑弹窗
+- `extractionTaskId`：打开风格提取进度弹窗
 
 ---
 
@@ -319,23 +324,58 @@ Agent 调用 clarify_form 工具
 
 #### `ConfigPanel` (`components/config/config-panel.tsx`)
 
-**角色**：工作区配置入口面板，提供 PPT 风格和 TTS 音色两个配置项。
+**角色**：工作区配置入口面板，提供 PPT 风格、TTS 音色和风格提取三个配置项。
 
 **功能**：
 - 显示当前选中的风格和音色摘要
 - 点击打开对应的选择弹窗
+- 提供"提取风格"入口，打开风格提取上传弹窗
 - 选择后通过 `updateWorkspaceConfig()` API 持久化到 workspace.ext_data
 
 #### `StylePickerDialog` (`components/config/style-picker-dialog.tsx`)
 
 **角色**：PPT 风格选择弹窗
 
-**预设风格**：12 种，分为三类：
-- **暗色系**：Bold Signal, Electric Studio, Creative Voltage, Dark Botanical
-- **亮色系**：Notebook Tabs, Pastel Geometry, Split Pastel, Vintage Editorial
-- **特色系**：Neon Cyber, Terminal Green, Swiss Modern, Paper & Ink
+**数据来源**：通过 `listPptStyles()` API 从后端加载风格列表（系统预设 + 用户自定义）
 
-每种风格包含：id、英文名、中文名、视觉描述、预览 HTML 文件路径。
+**风格分类**：
+- **深色主题 (dark)**：Bold Signal, Electric Studio, Creative Voltage, Dark Botanical 等
+- **浅色主题 (light)**：Notebook Tabs, Pastel Geometry, Split Pastel, Vintage Editorial 等
+- **自定义主题 (custom)**：通过风格提取工作流生成的用户自定义风格
+
+**功能**：
+- 网格布局展示所有风格，按分类分组
+- 每种风格显示中文名、英文名、视觉描述
+- 支持点击预览（加载风格预览 HTML 到 iframe）
+- 选中后持久化到 workspace config
+- 自定义风格支持删除（二次确认）
+
+#### `StyleExtractionUploadDialog` (`components/config/style-extraction-upload-dialog.tsx`)
+
+**角色**：PPTX 文件上传入口弹窗
+
+**功能**：
+- 选择 .pptx 文件
+- 调用 `submitStyleExtraction()` API 上传并启动风格提取
+- 上传成功后关闭弹窗，打开 StyleExtractionDialog 展示进度
+
+#### `StyleExtractionDialog` (`components/config/style-extraction-dialog.tsx`)
+
+**角色**：风格提取进度可视化弹窗
+
+**步骤可视化**：
+1. 上传文件
+2. 解析 PPTX 结构
+3. 分析风格特征
+4. 生成预览页面
+5. 完成
+
+**功能**：
+- 轮询 `getTask()` API 获取任务进度
+- 每步显示 done/active/pending/error 状态
+- 完成后可预览生成的风格预览 HTML
+- 确认后调用 `saveStyleFromExtraction()` 保存为自定义风格
+- 保存成功后通知 ConfigPanel 刷新风格列表
 
 #### `VoicePickerDialog` (`components/config/voice-picker-dialog.tsx`)
 
@@ -399,7 +439,7 @@ Agent 调用 clarify_form 工具
 |------|------|------|---------|
 | `ppt` | Presentation | 顶层 | `.html`（自包含 HTML） |
 | `narration` | Mic | PPT 子任务 | `.md`（文本）+ `.wav`（音频） |
-| `report` | FileText | 顶层 | `.md` |
+| `ppt_style_extraction` | Palette | 顶层（独立管理） | `preview.html` |
 
 **任务状态**：
 
@@ -411,6 +451,7 @@ Agent 调用 clarify_form 工具
 | `narrating` | Loader2 (旋转) | 黄色 | 口播稿文本生成中 |
 | `tts_generating` | Loader2 (旋转) | 蓝色 | 音频生成中（显示进度） |
 | `tts_failed` | AlertCircle | 橙色 | 音频生成失败 |
+| `cancelled` | XCircle | 灰色 | 已取消（风格提取） |
 
 ---
 
@@ -475,12 +516,19 @@ Agent 调用 clarify_form 工具
 | `updateWorkspaceThreadId()` | `PATCH /api/workspaces/{id}/thread` | 绑定 thread_id |
 | `updateWorkspaceConfig()` | `PATCH /api/workspaces/{id}/config` | 更新配置（ppt_style/voice_id） |
 | `listThreadMessages()` | `GET /api/threads/{id}/messages` | 获取消息历史（turn-based 分页） |
+| `getMessageDetail()` | `GET /api/threads/{id}/messages/{mid}` | 获取单条消息详情 |
 | `listDocuments()` | `GET /api/workspaces/{id}/documents` | 列出文档 |
 | `uploadDocument()` | `POST /api/workspaces/{id}/documents` | 上传文档（FormData） |
 | `deleteDocument()` | `DELETE /api/workspaces/{id}/documents/{doc_id}` | 删除文档 |
 | `listTasks()` | `GET /api/workspaces/{id}/tasks` | 列出任务（顶层+嵌套子任务） |
+| `getTask()` | `GET /api/workspaces/{id}/tasks/{task_id}` | 获取单个任务详情 |
 | `deleteTask()` | `DELETE /api/workspaces/{id}/tasks/{task_id}` | 删除任务 |
 | `saveTaskFile()` | `PUT /api/workspaces/{id}/tasks/{task_id}/file` | 保存 PPT HTML 编辑 |
+| `listPptStyles()` | `GET /api/ppt-styles` | 列出 PPT 风格（系统+自定义） |
+| `deletePptStyle()` | `DELETE /api/ppt-styles/{id}` | 删除自定义风格 |
+| `submitStyleExtraction()` | `POST /api/workspaces/{id}/style-extraction` | 上传 PPTX 启动风格提取 |
+| `deleteStyleExtraction()` | `DELETE /api/workspaces/{id}/style-extraction/{task_id}` | 取消并删除风格提取 |
+| `saveStyleFromExtraction()` | `POST /api/style-extraction/{task_id}/save` | 保存提取结果为自定义风格 |
 | `fetchFileContent()` | 直接 fetch | 获取文件文本内容 |
 
 **类型定义**：
@@ -490,6 +538,7 @@ Agent 调用 clarify_form 工具
 - `Task`：`id, workspace_id, type, title, status, result_data, parent_task_id, children, created_at`
 - `ThreadMessage`：`id, thread_id, workspace_id, message_id, role, type, content, tool_calls, ...`
 - `ThreadMessagesPage`：`messages, next_cursor`
+- `PptStyleInfo`：`id, user_id, category, name, name_en, description, preview_path, created_at`
 
 ### 6.2 状态管理
 
@@ -504,6 +553,8 @@ Agent 调用 clarify_form 工具
 | 消息历史 | `listThreadMessages` | turn-based 分页，按需加载更多 |
 | Thread ID | `useState` + 后端持久化 | Assistant 组件管理，跨会话持久 |
 | 工作区配置 | `useState` + 后端持久化 | ppt_style / voice_id，通过 updateWorkspaceConfig 同步 |
+| PPT 风格列表 | `useState` + API 加载 | ConfigPanel 管理，通过 listPptStyles 获取 |
+| 风格提取进度 | `useState` + 轮询 | StyleExtractionDialog 管理，通过 getTask 轮询 |
 | 用户 ID | `localStorage` | `lib/user.ts` 管理，浏览器级持久 |
 | 面板宽度 | `useState` | ThreePanel 组件局部状态 |
 | PPT 播放 | `useState` | workspace page 管理 playerData/previewTask |
@@ -580,13 +631,38 @@ Agent 调用 clarify_form 工具
 ```
 用户在右侧配置面板点击风格/音色入口
   → 打开 StylePickerDialog / VoicePickerDialog
+  → StylePickerDialog 从 API 加载风格列表（listPptStyles）
+  → 风格按分类展示（深色/浅色/自定义）
   → 选择后:
-    → onConfigChange("ppt_style", styleId) → 更新本地状态
-    → updateWorkspaceConfig(workspaceId, "ppt_style", styleId) → 持久化到后端
+    → onConfigChange("ppt_style", styleNameEn) → 更新本地状态
+    → updateWorkspaceConfig(workspaceId, "ppt_style", styleNameEn) → 持久化到后端
     → 后续聊天消息自动携带新的 ppt_style
 ```
 
-### 7.6 PPT 生成与查看
+### 7.6 PPT 风格提取
+
+```
+用户在配置面板点击"提取风格"
+  → 打开 StyleExtractionUploadDialog
+  → 选择 .pptx 文件 → submitStyleExtraction(workspaceId, file)
+  → 后端创建 Task (type=ppt_style_extraction) 并启动异步工作流
+  → 关闭上传弹窗 → 打开 StyleExtractionDialog
+
+StyleExtractionDialog 轮询进度:
+  → getTask(workspaceId, taskId) 每 2s 轮询
+  → 步骤可视化: 上传文件 → 解析PPTX → 分析风格 → 生成预览 → 完成
+  → 每步显示 done/active/pending/error 状态
+
+完成后:
+  → 展示风格预览 HTML（iframe 加载 preview.html）
+  → 展示风格名称（中英文）、描述
+  → 用户点击"保存为自定义风格"
+  → saveStyleFromExtraction(taskId, userId)
+  → 新风格写入 ppt_style 表 → 出现在风格选择弹窗的"自定义主题"中
+  → 刷新风格列表
+```
+
+### 7.7 PPT 生成与查看
 
 ```
 Agent 调用 save_ppt → 后端创建 Task + 保存文件
@@ -598,7 +674,7 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
   → 用户点击下载 → GET /api/files/{path} → 浏览器下载
 ```
 
-### 7.7 口播稿生成与播放
+### 7.8 口播稿生成与播放
 
 ```
 用户在 PPT 任务菜单中点击"生成口播稿"
@@ -614,7 +690,7 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
     → 逐页幻灯片 + 音频同步播放
 ```
 
-### 7.8 消息历史恢复
+### 7.9 消息历史恢复
 
 ```
 用户重新打开工作区
@@ -641,7 +717,8 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 │    工作区 CRUD                        文档/任务管理            │
 │    文档上传/删除                      消息历史查询              │
 │    工作区配置更新                     任务文件回写              │
-│    Thread ID 持久化                                          │
+│    Thread ID 持久化                   PPT 风格管理             │
+│    风格提取提交/轮询/保存                                     │
 │                                                             │
 │  assistant.tsx ── Stream (useStream) → LangGraph (:2024)    │
 │    (via @langchain/langgraph-sdk/react)                      │
@@ -667,14 +744,14 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 
 采用 **暗色主题**，通过 CSS 变量定义：
 
-| 变量 | 用途 |
+| 变量 | 用途 | 说明 |
 |------|------|
-| `--foreground` | 主文本色 |
-| `--background` | 页面背景 |
-| `--muted` / `--muted-foreground` | 次要内容 |
-| `--accent` / `--accent-foreground` | 强调色（按钮、高亮） |
-| `--border` | 边框 |
-| `--destructive` | 危险操作（删除） |
+| `--foreground` | 主文本色 | — |
+| `--background` | 页面背景 | — |
+| `--muted` / `--muted-foreground` | 次要内容 | — |
+| `--accent` / `--accent-foreground` | 强调色（按钮、高亮） | — |
+| `--border` | 边框 | — |
+| `--destructive` | 危险操作（删除） | — |
 
 ### 9.2 设计模式
 
@@ -682,20 +759,22 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 - **面板式布局**：工作区内三栏分屏，右侧面板上部配置、下部产出
 - **气泡式对话**：用户消息右对齐，AI 消息左对齐
 - **渐进披露**：工具调用默认折叠，思考过程可展开
-- **状态可视化**：文档/任务状态通过图标+颜色+文字三重提示
+- **状态可视化**：文档/任务/风格提取进度通过图标+颜色+文字三重提示
 - **父子层级**：产出面板中 PPT 任务可展开查看关联的口播稿子任务
 - **弹窗式预览/播放**：PPT 预览和播放均以全屏弹窗形式呈现
+- **弹窗式风格提取**：步骤进度可视化 + 完成后可预览 + 一键保存
 - **胶囊命令**：ExternalCommand 以胶囊 UI 注入聊天输入框，降低技能触发门槛
+- **分类风格选择**：PPT 风格按深色/浅色/自定义分类展示，支持预览和删除
 - **响应式**：工作区列表 1-3 列自适应
 
 ---
 
 ## 十、关键设计决策
 
-1. **双通道通信**：REST API 处理 CRUD，LangGraph Stream 处理 AI 对话，职责清晰
+1. **双通道通信**：REST API 处理 CRUD 和风格管理，LangGraph Stream 处理 AI 对话，职责清晰
 2. **Context Provider 模式**：`Assistant` 组件作为 Provider 管理 Agent 连接和消息历史，子组件通过 `useStreamContext()` 消费
 3. **无全局状态库**：数据流简单（列表+详情），每个面板独立管理自己的数据，通过 React 原生 `useState` + `useCallback` 足够
-4. **轮询而非 WebSocket**：文档状态和任务列表通过轮询同步，实现简单且场景契合（状态变化频率低）
+4. **轮询而非 WebSocket**：文档状态、任务列表和风格提取进度通过轮询同步，实现简单且场景契合
 5. **LangGraph SDK 接管对话**：不自行实现流式通信协议，完全依赖 `@langchain/langgraph-sdk/react` 的 `useStream` hook
 6. **Thread ID 双向持久化**：前端通过 `useStream` 获取 `threadId`，再通过 REST API 持久化到后端 workspace 记录
 7. **消息历史 turn-based 分页**：以 human 消息为 turn 边界，按需加载更多历史，避免一次性加载全部消息
@@ -704,3 +783,5 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 10. **PPT 预览/编辑一体化**：通过 iframe srcDoc + contentEditable 实现在线编辑，postMessage 获取修改后的 HTML 回写
 11. **所有组件 "use client"**：由于强依赖浏览器 API（localStorage、DOM 事件、流式通信），所有组件均为 Client Components
 12. **可拖拽三栏布局**：使用原生 DOM 事件实现拖拽，避免引入额外布局库
+13. **PPT 风格 API 化**：风格列表从后端 API 动态加载（系统预设 + 用户自定义），而非前端硬编码
+14. **风格提取工作流前端可视化**：通过轮询 Task 进度，将后端异步工作流的每个步骤实时展示给用户

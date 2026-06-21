@@ -321,7 +321,7 @@ export function PPTPlayerDialog({ workspaceId, narrationTask, pptTask, onClose }
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <div className="flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-2.5 backdrop-blur-md">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-foreground">
               {pptTask.title || "PPT 播放"}
@@ -353,7 +353,7 @@ export function PPTPlayerDialog({ workspaceId, narrationTask, pptTask, onClose }
         </div>
 
         {/* Controls */}
-        <div className="border-t border-border px-4 py-2.5">
+        <div className="border-t border-white/10 bg-black/40 px-4 py-2.5 backdrop-blur-md">
           {/* Playback buttons + volume + fullscreen */}
           <div className="flex items-center justify-between">
             {/* Left spacer (balances right side) */}

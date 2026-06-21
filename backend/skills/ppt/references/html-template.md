@@ -12,8 +12,9 @@ Reference architecture for generating slide presentations. Every presentation fo
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Presentation Title</title>
 
-    <!-- Fonts: use Fontshare or Google Fonts — never system fonts -->
-    <link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=..." />
+    <!-- Fonts: use fonts.loli.net (China-accessible Google Fonts mirror) — never system fonts, never api.fontshare.com -->
+    <link rel="preconnect" href="https://fonts.loli.net">
+    <link rel="stylesheet" href="https://fonts.loli.net/css2?family=..." />
 
     <style>
       /* ===========================================
@@ -118,38 +119,115 @@ Reference architecture for generating slide presentations. Every presentation fo
            =========================================== */
       class SlidePresentation {
         constructor() {
-          this.slides = document.querySelectorAll(".slide");
-          this.currentSlide = 0;
-          this.setupIntersectionObserver();
+          this.slides = document.querySelectorAll('.slide');
+          this.totalSlides = this.slides.length;
+          this.currentIndex = 0;
+          this.isScrolling = false;
+          this.progressBar = document.getElementById('progressBar');
+
+          this.setupObserver();
           this.setupKeyboardNav();
           this.setupTouchNav();
-          this.setupProgressBar();
+          this.setupWheelNav();
           this.setupNavDots();
+          this.updateUI();
         }
 
-        setupIntersectionObserver() {
-          // Add .visible class when slides enter viewport
-          // Triggers CSS animations efficiently
+        /* Mark slides visible when they enter viewport */
+        setupObserver() {
+          const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                this.currentIndex = Array.from(this.slides).indexOf(entry.target);
+                this.updateUI();
+              }
+            });
+          }, { threshold: 0.3 });
+          this.slides.forEach(s => observer.observe(s));
         }
 
+        /* Keyboard navigation — CRITICAL: use isContentEditable, NOT getAttribute */
         setupKeyboardNav() {
-          // Arrow keys, Space, Page Up/Down
+          document.addEventListener('keydown', (e) => {
+            // Skip navigation when user is editing text
+            if (e.target.isContentEditable) return;
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+              e.preventDefault();
+              this.goTo(this.currentIndex + 1);
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+              e.preventDefault();
+              this.goTo(this.currentIndex - 1);
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              this.goTo(0);
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              this.goTo(this.totalSlides - 1);
+            }
+          });
         }
 
+        /* Touch/swipe support */
         setupTouchNav() {
-          // Touch/swipe support for mobile
+          let startY = 0;
+          document.addEventListener('touchstart', (e) => {
+            if (e.target.isContentEditable) return;
+            startY = e.touches[0].clientY;
+          }, { passive: true });
+          document.addEventListener('touchend', (e) => {
+            if (e.target.isContentEditable) return;
+            const diff = startY - e.changedTouches[0].clientY;
+            if (Math.abs(diff) > 50) {
+              this.goTo(this.currentIndex + (diff > 0 ? 1 : -1));
+            }
+          }, { passive: true });
         }
 
-        setupProgressBar() {
-          // Update progress bar on scroll
+        /* Mouse wheel navigation with debounce */
+        setupWheelNav() {
+          document.addEventListener('wheel', (e) => {
+            if (this.isScrolling) return;
+            this.isScrolling = true;
+            setTimeout(() => { this.isScrolling = false; }, 800);
+            if (e.deltaY > 0) this.goTo(this.currentIndex + 1);
+            else if (e.deltaY < 0) this.goTo(this.currentIndex - 1);
+          }, { passive: true });
         }
 
+        /* Navigate to a specific slide index */
+        goTo(index) {
+          if (index < 0 || index >= this.totalSlides) return;
+          this.slides[index].scrollIntoView({ behavior: 'smooth' });
+        }
+
+        /* Update progress bar and nav dots */
+        updateUI() {
+          if (this.progressBar) {
+            this.progressBar.style.width = ((this.currentIndex + 1) / this.totalSlides * 100) + '%';
+          }
+          if (this.dots) {
+            this.dots.forEach((dot, i) => {
+              dot.classList.toggle('active', i === this.currentIndex);
+            });
+          }
+        }
+
+        /* IMPORTANT: Always clear container before building — if outerHTML was
+           captured while dots were rendered, re-opening the file would
+           append duplicates on top of existing ones. */
         setupNavDots() {
-          // IMPORTANT: Always clear before building — if outerHTML was
-          // captured while dots were rendered, re-opening the file would
-          // append a duplicate set on top of the existing ones.
-          this.navDotsContainer.innerHTML = "";
-          // Generate and manage navigation dots
+          const container = document.getElementById('navDots');
+          if (!container) return;
+          container.innerHTML = '';
+          for (let i = 0; i < this.totalSlides; i++) {
+            const btn = document.createElement('button');
+            btn.setAttribute('aria-label', `Slide ${i + 1}`);
+            btn.addEventListener('click', () => this.goTo(i));
+            container.appendChild(btn);
+          }
+          this.dots = container.querySelectorAll('button');
         }
       }
 
@@ -198,6 +276,11 @@ Every presentation must include:
 ## Inline Editing Implementation (Default)
 
 **Generate this edit-related HTML, CSS, and JS by default. Skip it only when the user explicitly asked for no editing controls, a smaller file, or a presentation-only output.**
+
+### CRITICAL RULES
+
+1. **NEVER put `contenteditable` on `<body>`.** The body tag must be plain `<body>` with no `contenteditable` attribute. `contenteditable="false"` is a string value that breaks JS truthy checks (`"false"` is truthy in JS). Only individual text elements get `contenteditable` when edit mode is active.
+2. **ALWAYS use `e.target.isContentEditable`** (not `e.target.getAttribute('contenteditable')`) to check if the user is editing text. `getAttribute` returns the string `"false"` which is truthy, blocking navigation.
 
 **Do NOT use CSS `~` sibling selector for hover-based show/hide.** The CSS-only approach (`edit-hotzone:hover ~ .edit-toggle`) fails because `pointer-events: none` on the toggle button breaks the hover chain: user hovers hotzone -> button becomes visible -> mouse moves toward button -> leaves hotzone -> button disappears before click.
 
@@ -275,10 +358,11 @@ hotzone.addEventListener("click", () => {
 });
 
 // 4. Keyboard shortcut (E key, skip when editing text)
+// CRITICAL: use isContentEditable, NOT getAttribute('contenteditable')
 document.addEventListener("keydown", (e) => {
   if (
     (e.key === "e" || e.key === "E") &&
-    !e.target.getAttribute("contenteditable")
+    !e.target.isContentEditable
   ) {
     editor.toggleEditMode();
   }
@@ -289,8 +373,8 @@ document.addEventListener("keydown", (e) => {
 
 When the user presses Ctrl+S in edit mode, `document.documentElement.outerHTML` captures the live DOM —
 including `body.edit-active`, `contenteditable="true"` on every text element, and `.active`/`.show` classes on
-the toggle button and banner. Anyone opening the saved file sees dashed outlines, a checkmark button, and an
-edit banner, as if permanently stuck in edit mode.
+the toggle button. Anyone opening the saved file sees dashed outlines and a checkmark button, as if permanently
+stuck in edit mode.
 
 Always implement `exportFile()` like this:
 
@@ -301,11 +385,8 @@ exportFile() {
     editableEls.forEach(el => el.removeAttribute('contenteditable'));
     document.body.classList.remove('edit-active');
 
-    // Also strip UI classes from toggle button and banner
     const editToggle = document.getElementById('editToggle');
-    const editBanner = document.querySelector('.edit-banner');
     editToggle?.classList.remove('active', 'show');
-    editBanner?.classList.remove('active', 'show');
 
     const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
 
@@ -313,7 +394,6 @@ exportFile() {
     document.body.classList.add('edit-active');
     editableEls.forEach(el => el.setAttribute('contenteditable', 'true'));
     editToggle?.classList.add('active');
-    editBanner?.classList.add('active');
 
     const blob = new Blob([html], { type: 'text/html' });
     const a = document.createElement('a');
@@ -321,6 +401,59 @@ exportFile() {
     a.download = 'presentation.html';
     a.click();
     URL.revokeObjectURL(a.href);
+}
+```
+
+### `toggleEditMode()` Implementation
+
+```javascript
+toggleEditMode() {
+    this.isActive = !this.isActive;
+    document.body.classList.toggle('edit-active', this.isActive);
+    this.toggleBtn.classList.toggle('active', this.isActive);
+    this.toggleBtn.textContent = this.isActive ? '✓ Done' : '✏️';
+
+    const textElements = document.querySelectorAll(
+        'h1, h2, h3, h4, p, li, .badge-item, .card-icon, .num'
+    );
+    textElements.forEach(el => {
+        if (this.isActive) {
+            el.setAttribute('contenteditable', 'true');
+        } else {
+            el.removeAttribute('contenteditable');
+        }
+    });
+}
+```
+
+### localStorage Auto-save
+
+```javascript
+setupAutoSave() {
+    const key = 'ppt-' + document.title;
+    // Restore saved edits on load
+    const saved = localStorage.getItem(key);
+    if (saved) {
+        try {
+            JSON.parse(saved).forEach(item => {
+                const el = document.querySelector(`[data-edit-id="${item.id}"]`);
+                if (el) el.innerHTML = item.html;
+            });
+        } catch(e) {}
+    }
+    // Save on every edit
+    document.addEventListener('input', (e) => {
+        if (e.target.isContentEditable) {
+            const editable = document.querySelectorAll('[contenteditable="true"]');
+            const data = Array.from(editable).map(el => {
+                if (!el.dataset.editId) {
+                    el.dataset.editId = 'ed-' + Math.random().toString(36).slice(2, 10);
+                }
+                return { id: el.dataset.editId, html: el.innerHTML };
+            });
+            localStorage.setItem(key, JSON.stringify(data));
+        }
+    });
 }
 ```
 

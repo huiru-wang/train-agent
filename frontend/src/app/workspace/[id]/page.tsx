@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Bot, Mic } from "lucide-react";
-import { getWorkspace, type Workspace, type Task } from "@/lib/api";
+import { getWorkspace, listPptStyles, listVoices, type Workspace, type Task, type PptStyleInfo, type VoiceInfo } from "@/lib/api";
 import { ThreePanel } from "@/components/layout/three-panel";
 import { ChatPanel } from "@/components/chat/chat-panel";
 import { DocumentPanel } from "@/components/document/document-panel";
@@ -11,6 +11,7 @@ import { TaskPanel } from "@/components/task/task-panel";
 import { ConfigPanel } from "@/components/config/config-panel";
 import { PPTPlayerDialog } from "@/components/player/ppt-player-dialog";
 import { PPTPreviewDialog } from "@/components/player/ppt-preview-dialog";
+import { StyleExtractionDialog } from "@/components/config/style-extraction-dialog";
 import type { ExternalCommand } from "@/components/chat/assistant";
 
 export default function WorkspacePage() {
@@ -25,6 +26,9 @@ export default function WorkspacePage() {
   const [externalCommand, setExternalCommand] = useState<ExternalCommand | null>(null);
   const [playerData, setPlayerData] = useState<{ narrationTask: Task; pptTask: Task } | null>(null);
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
+  const [pptStyles, setPptStyles] = useState<PptStyleInfo[]>([]);
+  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [styleExtractionTaskId, setStyleExtractionTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     getWorkspace(workspaceId)
@@ -33,7 +37,13 @@ export default function WorkspacePage() {
         // Read config from ext_data
         const ext = ws.ext_data ?? {};
         if (ext.ppt_style) setPptStyle(ext.ppt_style as string);
-        if (ext.voice_id) setVoiceId(ext.voice_id as string);
+        // voice_id is stored inside voice_info.id
+        const voiceInfo = ext.voice_info as { id?: string } | undefined;
+        if (voiceInfo?.id) setVoiceId(voiceInfo.id);
+        // Fetch PPT styles for this user
+        listPptStyles(ws.user_id).then(setPptStyles).catch(() => {});
+        // Fetch available voices
+        listVoices().then(setVoices).catch(() => {});
       })
       .catch(() => router.push("/"));
   }, [workspaceId, router]);
@@ -70,6 +80,16 @@ export default function WorkspacePage() {
     setPreviewTask(task);
   }, []);
 
+  const handleViewStyleExtraction = useCallback((task: Task) => {
+    setStyleExtractionTaskId(task.id);
+  }, []);
+
+  const refreshPptStyles = useCallback(() => {
+    if (workspace) {
+      listPptStyles(workspace.user_id).then(setPptStyles).catch(() => {});
+    }
+  }, [workspace]);
+
   if (!workspace) {
     return (
       <div className="flex h-screen items-center justify-center text-muted-foreground">
@@ -82,12 +102,16 @@ export default function WorkspacePage() {
     <div className="flex h-full flex-col">
       <ConfigPanel
         workspaceId={workspaceId}
+        userId={workspace.user_id}
         pptStyle={pptStyle}
         voiceId={voiceId}
+        styles={pptStyles}
+        voices={voices}
         onConfigChange={handleConfigChange}
+        onStyleSaved={refreshPptStyles}
       />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <TaskPanel workspaceId={workspaceId} onNarrate={handleNarrate} onPlayNarration={handlePlayNarration} onPreview={handlePreview} />
+        <TaskPanel workspaceId={workspaceId} styles={pptStyles} voices={voices} onNarrate={handleNarrate} onPlayNarration={handlePlayNarration} onPreview={handlePreview} onViewStyleExtraction={handleViewStyleExtraction} />
       </div>
     </div>
   );
@@ -136,7 +160,19 @@ export default function WorkspacePage() {
         <PPTPreviewDialog
           workspaceId={workspaceId}
           pptTask={previewTask}
+          styles={pptStyles}
           onClose={() => setPreviewTask(null)}
+        />
+      )}
+
+      {/* Style Extraction Dialog */}
+      {styleExtractionTaskId && (
+        <StyleExtractionDialog
+          workspaceId={workspaceId}
+          userId={workspace.user_id}
+          taskId={styleExtractionTaskId}
+          onClose={() => setStyleExtractionTaskId(null)}
+          onSaved={refreshPptStyles}
         />
       )}
     </div>

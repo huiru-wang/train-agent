@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, Save, Check, Loader2, AlertCircle, Eye, Pencil } from "lucide-react";
-import { fetchFileContent, saveTaskFile, type Task } from "@/lib/api";
-import { PPT_STYLES } from "@/components/config/style-picker-dialog";
+import { X, Save, Check, Loader2, AlertCircle, Pencil } from "lucide-react";
+import { fetchFileContent, saveTaskFile, type Task, type PptStyleInfo } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
@@ -50,10 +49,11 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 interface PPTPreviewDialogProps {
   workspaceId: string;
   pptTask: Task;
+  styles: PptStyleInfo[];
   onClose: () => void;
 }
 
-export function PPTPreviewDialog({ workspaceId, pptTask, onClose }: PPTPreviewDialogProps) {
+export function PPTPreviewDialog({ workspaceId, pptTask, styles, onClose }: PPTPreviewDialogProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pptHtml, setPptHtml] = useState("");
@@ -68,7 +68,7 @@ export function PPTPreviewDialog({ workspaceId, pptTask, onClose }: PPTPreviewDi
   // Derive style name from task result_data
   const resultData = pptTask.result_data ? JSON.parse(pptTask.result_data) : null;
   const styleId = resultData?.ppt_style || "";
-  const styleName = PPT_STYLES.find((s) => s.id === styleId)?.cn || styleId;
+  const styleName = styles.find((s) => s.name_en === styleId)?.name || styleId;
   const pptTitle = pptTask.title || "未命名 PPT";
 
   // Load PPT HTML
@@ -144,7 +144,7 @@ export function PPTPreviewDialog({ workspaceId, pptTask, onClose }: PPTPreviewDi
     setIsEditMode(newMode);
   }, [isEditMode]);
 
-  // Save handler: request HTML from iframe via postMessage, then upload
+  // Save handler: close edit mode first, then request HTML and upload
   const handleSave = useCallback(async () => {
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow) {
@@ -157,6 +157,10 @@ export function PPTPreviewDialog({ workspaceId, pptTask, onClose }: PPTPreviewDi
     setSaveError("");
 
     try {
+      // Close edit mode first to remove contenteditable from saved HTML
+      iframe.contentWindow.postMessage({ type: "toggle-edit-mode", editable: false }, "*");
+      setIsEditMode(false);
+
       // Request current HTML from iframe via postMessage
       const htmlPromise = new Promise<string>((resolve) => {
         htmlResponseResolver.current = resolve;
@@ -304,38 +308,36 @@ export function PPTPreviewDialog({ workspaceId, pptTask, onClose }: PPTPreviewDi
           )}
         </div>
 
-        {/* Right: mode toggle + save button + error message */}
+        {/* Right: edit/save button + error message */}
         <div className="flex items-center gap-2">
           {saveState === "error" && saveError && (
             <span className="text-xs text-red-400">{saveError}</span>
           )}
-          {/* Mode toggle button */}
-          <button
-            onClick={handleToggleEdit}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
-              isEditMode
-                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-            }`}
-            title={isEditMode ? "切换到预览模式" : "切换到编辑模式"}
-          >
-            {isEditMode ? <Pencil size={13} /> : <Eye size={13} />}
-            {isEditMode ? "关闭编辑模式" : "开启编辑模式"}
-          </button>
-          {/* Save button */}
-          <button
-            onClick={handleSave}
-            disabled={saveState === "saving"}
-            className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-colors ${
-              saveState === "saved"
-                ? "bg-green-500/20 text-green-400"
-                : saveState === "error"
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-accent/20 text-accent hover:bg-accent/30"
-            } disabled:opacity-50`}
-          >
-            <SaveButtonContent />
-          </button>
+          {/* Combined edit/save button */}
+          {!isEditMode ? (
+            <button
+              onClick={handleToggleEdit}
+              className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+              title="开启编辑模式"
+            >
+              <Pencil size={13} />
+              开启编辑模式
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={saveState === "saving"}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                saveState === "saved"
+                  ? "bg-green-500/20 text-green-400"
+                  : saveState === "error"
+                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                    : "bg-accent/20 text-accent hover:bg-accent/30"
+              } disabled:opacity-50`}
+            >
+              <SaveButtonContent />
+            </button>
+          )}
         </div>
       </div>
     </div>

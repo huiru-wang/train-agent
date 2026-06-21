@@ -10,7 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from src.api.deps import db, doc_service, file_store, skill_manager, vector_store
+from src.api.deps import db, doc_service, file_store, skill_manager, style_extract_manager, vector_store
+from src.storage.database import _BUILTIN_VOICES
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +226,12 @@ async def delete_task(workspace_id: str, task_id: str):
         for f in output_base.rglob(f"{task_id}_narration.md"):
             f.unlink(missing_ok=True)
         logger.info("[API] cleaned narration files for task: %s", task_id)
+    elif task["type"] == "ppt_style_extraction":
+        # Style extraction: remove outputs/{task_id}/ directory
+        se_dir = output_base / task_id
+        if se_dir.exists():
+            shutil.rmtree(se_dir, ignore_errors=True)
+            logger.info("[API] removed style extraction output directory: %s", se_dir)
 
     return {"ok": True, "deleted_ids": deleted_ids}
 
@@ -253,7 +260,124 @@ async def save_task_file(workspace_id: str, task_id: str, req: SaveTaskFileReque
     return {"ok": True}
 
 
+# --- Style Extraction ---
+
+
+@app.post("/api/workspaces/{workspace_id}/style-extraction")
+async def submit_style_extraction(
+    workspace_id: str,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """Upload a PPTX file and start style extraction workflow."""
+    logger.info("[API] POST /api/workspaces/%s/style-extraction filename=%s", workspace_id, file.filename)
+    if not file.filename or not file.filename.lower().endswith(".pptx"):
+        raise HTTPException(status_code=400, detail="Only .pptx files are accepted")
+
+    content = await file.read()
+    pptx_path = await file_store.save_async(workspace_id, file.filename, content)
+
+    task = await db.create_task(
+        workspace_id=workspace_id,
+        type="ppt_style_extraction",
+        title=f"风格提取: {file.filename}",
+    )
+    logger.info("[API] style extraction task created: id=%s", task["id"])
+
+    background_tasks.add_task(style_extract_manager.run_extraction, task["id"], workspace_id, pptx_path)
+    return task
+
+
+@app.get("/api/workspaces/{workspace_id}/tasks/{task_id}")
+async def get_task(workspace_id: str, task_id: str):
+    """Get a single task by ID."""
+    logger.info("[API] GET /api/workspaces/%s/tasks/%s", workspace_id, task_id)
+    task = await db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@app.delete("/api/workspaces/{workspace_id}/style-extraction/{task_id}")
+async def delete_style_extraction(workspace_id: str, task_id: str):
+    """Cancel running extraction and delete the task."""
+    logger.info("[API] DELETE /api/workspaces/%s/style-extraction/%s", workspace_id, task_id)
+
+    # Cancel if running
+    await style_extract_manager.cancel_extraction(task_id)
+
+    # Use the generic delete_task logic (which handles file cleanup for ppt_style_extraction)
+    task = await db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    deleted_ids = await db.delete_task(task_id)
+
+    output_base = Path(file_store.base_dir) / workspace_id / "outputs"
+    se_dir = output_base / task_id
+    if se_dir.exists():
+        shutil.rmtree(se_dir, ignore_errors=True)
+        logger.info("[API] removed style extraction output directory: %s", se_dir)
+
+    return {"ok": True, "deleted_ids": deleted_ids}
+
+
+class SaveStyleRequest(BaseModel):
+    user_id: str
+
+
+@app.post("/api/style-extraction/{task_id}/save")
+async def save_style_from_extraction(task_id: str, req: SaveStyleRequest):
+    """Save completed extraction result as a custom PPT style."""
+    logger.info("[API] POST /api/style-extraction/%s/save user_id=%s", task_id, req.user_id)
+    try:
+        style = await style_extract_manager.save_as_custom_style(task_id, req.user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return style
+
+
 # --- File download ---
+
+
+@app.get("/api/ppt-styles")
+async def list_ppt_styles(user_id: str = Query(default="")):
+    """List PPT styles: system builtin + user custom (if user_id provided)."""
+    logger.info("[API] GET /api/ppt-styles user_id=%s", user_id)
+    user_ids = ["system"]
+    if user_id:
+        user_ids.append(user_id)
+    return await db.list_all_ppt_styles(user_ids)
+
+
+@app.get("/api/voices")
+async def list_voices():
+    """List available TTS voices from builtin seed data."""
+    logger.info("[API] GET /api/voices")
+    return _BUILTIN_VOICES
+
+
+@app.delete("/api/ppt-styles/{style_id}")
+async def delete_ppt_style(style_id: str):
+    """Delete a custom PPT style and its preview file."""
+    logger.info("[API] DELETE /api/ppt-styles/%s", style_id)
+    # Verify it exists and is not a system style
+    style = await db.get_ppt_style(style_id)
+    if not style:
+        raise HTTPException(status_code=404, detail="Style not found")
+    if style["user_id"] == "system":
+        raise HTTPException(status_code=403, detail="Cannot delete system styles")
+    # Delete preview file and its directory if it exists
+    preview_path = style.get("preview_path", "")
+    if preview_path and "/" in preview_path:
+        p = Path(preview_path)
+        if p.exists():
+            # Remove the style directory (parent of preview.html)
+            style_dir = p.parent
+            shutil.rmtree(style_dir, ignore_errors=True)
+            logger.info("[API] deleted style directory: %s", style_dir)
+    await db.delete_ppt_style(style_id)
+    return {"ok": True}
 
 
 @app.get("/api/files/{file_path:path}")
@@ -286,3 +410,22 @@ for mount_path, directory in _static_mounts.items():
         app.mount(mount_path, StaticFiles(directory=str(directory)), name=mount_path.strip("/"))
     else:
         logger.warning("[API] static directory missing, skip mount: %s", directory)
+
+
+@app.get("/api/ppt-style-preview/{preview_path:path}")
+async def preview_ppt_style(preview_path: str):
+    """Serve PPT style preview HTML for both system and custom styles."""
+    logger.info("[API] GET /api/ppt-style-preview/%s", preview_path)
+    builtin_dir = _static_dir / "ppt-styles"
+    # System styles: plain filename (e.g. "01-bold-signal.html")
+    # Custom styles: path with separators (e.g. "data/files/.../preview.html")
+    if "/" not in preview_path and "\\" not in preview_path:
+        resolved = builtin_dir / preview_path
+    else:
+        resolved = Path(preview_path)
+    if not resolved.exists():
+        raise HTTPException(status_code=404, detail=f"Preview file not found: {preview_path}")
+    response = FileResponse(path=str(resolved), media_type="text/html")
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response

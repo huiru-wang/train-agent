@@ -3,7 +3,7 @@
 import os
 from dataclasses import dataclass
 
-from src.agent.skill_manager import SkillManager
+from src.managers.skill_manager import SkillManager
 from src.storage.database import Database
 from src.storage.file_store import FileStore
 from src.storage.vector_store import VectorStore

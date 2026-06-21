@@ -232,6 +232,87 @@ export function saveTaskFile(
   });
 }
 
+// --- PPT Styles ---
+
+export interface PptStyleInfo {
+  id: string;
+  user_id: string;
+  category: string;
+  name: string;
+  name_en: string;
+  description: string;
+  preview_path: string;
+  created_at: string;
+}
+
+export function listPptStyles(userId: string): Promise<PptStyleInfo[]> {
+  return request(`/api/ppt-styles?user_id=${encodeURIComponent(userId)}`);
+}
+
+export function deletePptStyle(styleId: string): Promise<{ ok: boolean }> {
+  return request(`/api/ppt-styles/${styleId}`, { method: "DELETE" });
+}
+
+// --- Voices ---
+
+export interface VoiceInfo {
+  id: string;
+  name: string;
+  gender: string;
+  trait: string;
+  audio_url: string;
+}
+
+export function listVoices(): Promise<VoiceInfo[]> {
+  return request("/api/voices");
+}
+
+// --- Style Extraction ---
+
+export function submitStyleExtraction(
+  workspaceId: string,
+  file: File
+): Promise<Task> {
+  const formData = new FormData();
+  formData.append("file", file);
+  return fetch(
+    `${API_BASE}/api/workspaces/${workspaceId}/style-extraction`,
+    { method: "POST", body: formData }
+  ).then(async (res) => {
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, res.statusText, err.detail || res.statusText);
+    }
+    return res.json();
+  });
+}
+
+export function getTask(
+  workspaceId: string,
+  taskId: string
+): Promise<Task> {
+  return request(`/api/workspaces/${workspaceId}/tasks/${taskId}`);
+}
+
+export function deleteStyleExtraction(
+  workspaceId: string,
+  taskId: string
+): Promise<{ ok: boolean }> {
+  return request(`/api/workspaces/${workspaceId}/style-extraction/${taskId}`, {
+    method: "DELETE",
+  });
+}
+
+export function saveStyleFromExtraction(
+  taskId: string,
+  userId: string
+): Promise<PptStyleInfo> {
+  return request(`/api/style-extraction/${taskId}/save`, {
+    method: "POST",
+    body: JSON.stringify({ user_id: userId }),
+  });
+}
+
 // --- Files ---
 
 export async function fetchFileContent(fileUrl: string): Promise<string> {

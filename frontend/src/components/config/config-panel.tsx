@@ -1,35 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { Palette, Mic, Settings } from "lucide-react";
-import { updateWorkspaceConfig } from "@/lib/api";
-import {
-  StylePickerDialog,
-  PPT_STYLES,
-} from "./style-picker-dialog";
-import {
-  VoicePickerDialog,
-  VOICES,
-} from "./voice-picker-dialog";
+import { Palette, Mic, Settings, Wand2 } from "lucide-react";
+import { updateWorkspaceConfig, type PptStyleInfo, type Task, type VoiceInfo } from "@/lib/api";
+import { StylePickerDialog } from "./style-picker-dialog";
+import { VoicePickerDialog } from "./voice-picker-dialog";
+import { StyleExtractionUploadDialog } from "./style-extraction-upload-dialog";
+import { StyleExtractionDialog } from "./style-extraction-dialog";
 
 interface ConfigPanelProps {
   workspaceId: string;
+  userId: string;
   pptStyle: string;
   voiceId: string;
+  styles: PptStyleInfo[];
+  voices: VoiceInfo[];
   onConfigChange: (key: string, value: string) => void;
+  onStyleSaved?: () => void;
 }
 
 export function ConfigPanel({
   workspaceId,
+  userId,
   pptStyle,
   voiceId,
+  styles,
+  voices,
   onConfigChange,
+  onStyleSaved,
 }: ConfigPanelProps) {
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [showVoicePicker, setShowVoicePicker] = useState(false);
+  const [showExtractionUpload, setShowExtractionUpload] = useState(false);
+  const [extractionTaskId, setExtractionTaskId] = useState<string | null>(null);
 
-  const selectedStyle = PPT_STYLES.find((s) => s.id === pptStyle);
-  const selectedVoice = VOICES.find((v) => v.id === voiceId);
+  const selectedStyle = styles.find((s) => s.name_en === pptStyle);
+  const selectedVoice = voices.find((v) => v.id === voiceId);
 
   const handleStyleSelect = async (styleId: string) => {
     onConfigChange("ppt_style", styleId);
@@ -40,13 +46,25 @@ export function ConfigPanel({
     }
   };
 
-  const handleVoiceSelect = async (voiceId: string) => {
-    onConfigChange("voice_id", voiceId);
+  const handleVoiceSelect = async (selectedVoiceId: string) => {
+    const voice = voices.find((v) => v.id === selectedVoiceId);
+    onConfigChange("voice_id", selectedVoiceId);
     try {
-      await updateWorkspaceConfig(workspaceId, "voice_id", voiceId);
+      if (voice) {
+        await updateWorkspaceConfig(workspaceId, "voice_info", {
+          id: voice.id,
+          name: voice.name,
+          trait: voice.trait,
+          gender: voice.gender,
+        });
+      }
     } catch {
-      console.error("Failed to update voice_id config");
+      console.error("Failed to update voice config");
     }
+  };
+
+  const handleStyleDelete = async () => {
+    onStyleSaved?.();
   };
 
   return (
@@ -69,7 +87,7 @@ export function ConfigPanel({
                 PPT 风格
               </p>
               <p className="truncate text-[10px] text-muted-foreground">
-                {selectedStyle ? `${selectedStyle.cn} ${selectedStyle.name}` : pptStyle}
+                {selectedStyle ? `${selectedStyle.name}` : pptStyle}
               </p>
             </div>
           </button>
@@ -89,22 +107,62 @@ export function ConfigPanel({
               </p>
             </div>
           </button>
+
+          {/* Style Extraction */}
+          <button
+            onClick={() => setShowExtractionUpload(true)}
+            className="flex items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-left transition-colors hover:border-accent/50 hover:bg-muted/50"
+          >
+            <Wand2 size={14} className="shrink-0 text-accent/70" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-foreground">
+                风格提取
+              </p>
+              <p className="truncate text-[10px] text-muted-foreground">
+                提供 PPTX 文件提取风格
+              </p>
+            </div>
+          </button>
         </div>
       </div>
 
       {showStylePicker && (
         <StylePickerDialog
           selectedId={pptStyle}
+          styles={styles}
           onSelect={handleStyleSelect}
           onClose={() => setShowStylePicker(false)}
+          onDelete={handleStyleDelete}
         />
       )}
 
       {showVoicePicker && (
         <VoicePickerDialog
           selectedId={voiceId}
+          voices={voices}
           onSelect={handleVoiceSelect}
           onClose={() => setShowVoicePicker(false)}
+        />
+      )}
+
+      {showExtractionUpload && (
+        <StyleExtractionUploadDialog
+          workspaceId={workspaceId}
+          onClose={() => setShowExtractionUpload(false)}
+          onSubmitted={(task: Task) => {
+            setShowExtractionUpload(false);
+            setExtractionTaskId(task.id);
+          }}
+        />
+      )}
+
+      {extractionTaskId && (
+        <StyleExtractionDialog
+          workspaceId={workspaceId}
+          userId={userId}
+          taskId={extractionTaskId}
+          onClose={() => setExtractionTaskId(null)}
+          onSaved={onStyleSaved}
         />
       )}
     </>

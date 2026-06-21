@@ -1,5 +1,8 @@
 import logging
+import os
 from pathlib import Path
+
+from langchain_openai import ChatOpenAI
 
 from src.parsers import PdfParser, DocxParser, MarkdownParser
 from src.parsers.base import DocumentSection, split_sections_into_chunks
@@ -10,18 +13,21 @@ from src.storage.vector_store import VectorStore
 logger = logging.getLogger(__name__)
 
 
-class DocService:
+class DocManager:
     def __init__(
         self,
         db: Database,
         vector_store: VectorStore,
         file_store: FileStore,
-        llm=None,
     ):
         self.db = db
         self.vector_store = vector_store
         self.file_store = file_store
-        self.llm = llm
+        self.llm = ChatOpenAI(
+            model=os.getenv("SUMMARIZATION_MODEL"),
+            api_key=os.getenv("SUMMARIZATION_API_KEY"),
+            base_url=os.getenv("SUMMARIZATION_API_BASE"),
+        )
         self._pdf_parser = PdfParser()
         self._docx_parser = DocxParser()
         self._markdown_parser = MarkdownParser()
@@ -37,21 +43,21 @@ class DocService:
     ) -> dict:
         file_type = self._detect_type(filename)
         logger.info(
-            "[DocService] create_document_upload: filename=%s, type=%s, size=%d bytes, workspace=%s",
+            "[DocManager] create_document_upload: filename=%s, type=%s, size=%d bytes, workspace=%s",
             filename,
             file_type,
             len(content),
             workspace_id,
         )
         storage_path = self.file_store.save(workspace_id, filename, content)
-        logger.info("[DocService] file saved to: %s", storage_path)
+        logger.info("[DocManager] file saved to: %s", storage_path)
         doc = await self.db.create_document(
             workspace_id=workspace_id,
             filename=filename,
             file_type=file_type,
             storage_path=storage_path,
         )
-        logger.info("[DocService] document record created: id=%s", doc["id"])
+        logger.info("[DocManager] document record created: id=%s", doc["id"])
         return doc
 
     async def process_document(self, doc_id: str) -> dict:
@@ -69,7 +75,7 @@ class DocService:
             await self.db.update_document(doc_id, status="parsing", error_message=None)
             content = Path(storage_path).read_bytes()
             sections = self._parse_structured(file_type, content, storage_path)
-            logger.info("[DocService] parsed %d sections", len(sections))
+            logger.info("[DocManager] parsed %d sections", len(sections))
 
             # Plain text for summary generation + debug export
             full_text = "\n\n".join(
@@ -88,13 +94,13 @@ class DocService:
             self.file_store.save(workspace_id, md_filename, md_content.encode("utf-8"))
             await self.db.update_document(doc_id, status="parsed")
             logger.info(
-                "[DocService] parsed text saved as: %s/%s", workspace_id, md_filename
+                "[DocManager] parsed text saved as: %s/%s", workspace_id, md_filename
             )
 
             # --- Section-aware chunking ---
             await self.db.update_document(doc_id, status="chunking")
             chunks = split_sections_into_chunks(sections)
-            logger.info("[DocService] split into %d chunks", len(chunks))
+            logger.info("[DocManager] split into %d chunks", len(chunks))
 
             await self.db.update_document(doc_id, status="indexing")
             self.vector_store.add_structured_chunks(
@@ -103,12 +109,12 @@ class DocService:
                 chunks=chunks,
                 filename=filename,
             )
-            logger.info("[DocService] chunks added to vector store")
+            logger.info("[DocManager] chunks added to vector store")
 
             await self.db.update_document(doc_id, status="summarizing")
             summary = await self._generate_summary(full_text)
             logger.info(
-                "[DocService] summary generated: %s",
+                "[DocManager] summary generated: %s",
                 summary[:100] if summary else "None",
             )
             await self.db.update_document(
@@ -117,10 +123,10 @@ class DocService:
             doc["status"] = "ready"
             doc["summary"] = summary
             doc["error_message"] = None
-            logger.info("[DocService] document ready: id=%s", doc["id"])
+            logger.info("[DocManager] document ready: id=%s", doc["id"])
         except Exception as exc:
             logger.error(
-                "[DocService] upload failed for %s: %s", filename, exc, exc_info=True
+                "[DocManager] upload failed for %s: %s", filename, exc, exc_info=True
             )
             await self.db.update_document(
                 doc_id, status="error", error_message=str(exc)
@@ -212,6 +218,6 @@ class DocService:
             response = await self.llm.ainvoke(messages)
             return response.content
         except Exception as exc:
-            logger.warning("[DocService] LLM summary failed, using fallback: %s", exc)
+            logger.warning("[DocManager] LLM summary failed, using fallback: %s", exc)
             # 返回截断文本作为 fallback，不暴露 LLM 错误
             return text[:500] + "..." if len(text) > 500 else text

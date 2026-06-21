@@ -1,21 +1,38 @@
 import asyncio
 import json
 import logging
+import re
+import traceback
 
 from langchain.tools import tool, ToolRuntime
 
 from src.agent.state import TrainAgentState
-from src.services.tts_service import TTSService
-from src.storage.database import Database
+from src.managers.tts_manager import TTSManager
+from src.storage.database import Database, _BUILTIN_VOICES
 from src.storage.file_store import FileStore
 
 logger = logging.getLogger(__name__)
+
+# Patterns for RAG source attribution markers that must not appear in narration text
+_REF_PATTERNS = [
+    re.compile(r'\{1,2\s*ref:[^}]*\}{1,2}'),
+    re.compile(r'ref:[^\s<>"]+\|[^\s<>"]+'),
+    re.compile(r'\[片段\d+\]\s*'),
+    re.compile(r'📄\s*[^|\n<]+\|\s*[^\n<]+'),
+]
+
+
+def _strip_ref_markers(text: str) -> str:
+    """Remove RAG source attribution markers from narration text as a safety net."""
+    for pattern in _REF_PATTERNS:
+        text = pattern.sub('', text)
+    return text
 
 
 async def _tts_pipeline(
     db: Database,
     file_store: FileStore,
-    tts_service: TTSService,
+    tts_service: TTSManager,
     task_id: str,
     parent_task_id: str,
     workspace_id: str,
@@ -61,17 +78,24 @@ async def _tts_pipeline(
         logger.info("[save_narration] TTS pipeline completed for task %s", task_id)
 
     except Exception as exc:
-        logger.error("[save_narration] TTS pipeline failed at slide %s: %s", num, exc, exc_info=True)
-        current = await db.get_task_result_data(task_id)
-        current["tts_error"] = f"Slide {num} TTS failed: {exc}"
-        await db.update_task(
-            task_id,
-            status="tts_failed",
-            result_data=json.dumps(current, ensure_ascii=False),
+        tb = traceback.format_exc()
+        logger.error(
+            "[save_narration] TTS pipeline failed at slide %s: %s: %s\n%s",
+            num, type(exc).__name__, exc, tb,
         )
+        try:
+            current = await db.get_task_result_data(task_id)
+            current["tts_error"] = f"Slide {num} TTS failed: {type(exc).__name__}: {exc}"
+            await db.update_task(
+                task_id,
+                status="tts_failed",
+                result_data=json.dumps(current, ensure_ascii=False),
+            )
+        except Exception as update_exc:
+            logger.error("[save_narration] failed to update task status: %s", update_exc)
 
 
-def create_save_narration_tool(db: Database, file_store: FileStore, tts_service: TTSService):
+def create_save_narration_tool(db: Database, file_store: FileStore, tts_service: TTSManager):
     @tool
     async def save_narration(
         runtime: ToolRuntime[TrainAgentState],
@@ -79,7 +103,6 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         title: str,
         slides: str,
         language: str = "zh",
-        voice: str = "",
         **kwargs,
     ) -> str:
         """保存口播稿并触发 TTS 音频生成。
@@ -92,12 +115,26 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
             title: 口播稿标题，如"新员工消防培训 · 口播稿"
             slides: JSON 字符串，格式为 [{"number":1, "title":"...", "text":"口播稿文本"}, ...]
             language: 语言代码 — 'zh'（中文）或 'en'（英文）
-            voice: TTS 音色名称（可选，默认从工作区配置读取）
         """
         workspace_id = runtime.state.get("workspace_id", "default")
+        # Voice: always from TrainAgentState, fallback to workspace ext_data
+        voice_id = runtime.state.get("voice_id", "")
+        if not voice_id:
+            ws = await db.get_workspace(workspace_id)
+            ext_data = ws.get("ext_data", {}) or {}
+            voice_info = ext_data.get("voice_info", {})
+            voice_id = voice_info.get("id", "Cherry") if isinstance(voice_info, dict) else "Cherry"
+
+        # Look up voice display name from builtin seed data
+        voice_name = ""
+        for v in _BUILTIN_VOICES:
+            if v["id"] == voice_id:
+                voice_name = v["name"]
+                break
+
         logger.info(
-            "[save_narration] parent=%s, title=%s, language=%s, voice=%s, workspace=%s",
-            parent_task_id, title, language, voice, workspace_id,
+            "[save_narration] parent=%s, title=%s, language=%s, voice_id=%s, workspace=%s",
+            parent_task_id, title, language, voice_id, workspace_id,
         )
 
         # Validate parent task
@@ -116,19 +153,14 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         if not slides_list:
             return "错误：slides 列表为空。"
 
-        # Default voice: prefer runtime state, then workspace config
-        if not voice:
-            voice = runtime.state.get("voice_id", "")
-        if not voice:
-            ws = await db.get_workspace(workspace_id)
-            voice = (ws.get("ext_data", {}) or {}).get("voice_id", "Cherry")
-
         # Build narration markdown text
         md_lines = [f"# {title}\n"]
         for slide in slides_list:
             num = slide.get("number", "?")
             slide_title = slide.get("title", "")
             text = slide.get("text", "")
+            # Safety net: strip RAG source attribution markers
+            text = _strip_ref_markers(text)
             md_lines.append(f"## 【第{num}页：{slide_title}】\n")
             md_lines.append(f"{text}\n")
 
@@ -158,7 +190,8 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         result_data = {
             "slides": slides_list,
             "language": language,
-            "voice": voice,
+            "voice_id": voice_id,
+            "voice_name": voice_name,
             "text_file_path": text_file_path,
             "text_filename": text_filename,
             "tts_progress": 0,
@@ -180,7 +213,7 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
                     parent_task_id=parent_task_id,
                     workspace_id=workspace_id,
                     slides=slides_list,
-                    voice=voice,
+                    voice=voice_id,
                 )
             )
             tts_msg = "，TTS 音频正在后台生成"

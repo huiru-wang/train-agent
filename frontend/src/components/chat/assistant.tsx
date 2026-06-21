@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { updateWorkspaceThreadId, getWorkspace, listThreadMessages, type ThreadMessage } from "@/lib/api";
 
@@ -19,10 +19,10 @@ export interface ExternalCommand {
   metadata?: Record<string, string>;
 }
 
-// --- Stream context ---
+// --- Split contexts: control vs messages ---
+// Splitting prevents ChatInput / InterruptBlock from re-rendering on every message update.
 
-interface StreamContextValue {
-  messages: any[];
+interface StreamControlValue {
   isLoading: boolean;
   interrupt: { value?: unknown } | undefined;
   submit: (content: string) => void;
@@ -36,8 +36,11 @@ interface StreamContextValue {
   threadId: string | null;
 }
 
-const StreamContext = createContext<StreamContextValue>({
-  messages: [],
+interface MessageContextValue {
+  messages: any[];
+}
+
+const StreamControlContext = React.createContext<StreamControlValue>({
   isLoading: false,
   interrupt: undefined,
   submit: () => { },
@@ -50,13 +53,21 @@ const StreamContext = createContext<StreamContextValue>({
   threadId: null,
 });
 
+const MessageContext = React.createContext<MessageContextValue>({ messages: [] });
+
+/** For control-only consumers (ChatInput, InterruptBlock) — does NOT re-render on message changes. */
 export function useStreamContext() {
-  return useContext(StreamContext);
+  return useContext(StreamControlContext);
+}
+
+/** For message list consumers — re-renders on throttled message updates. */
+export function useMessageContext() {
+  return useContext(MessageContext);
 }
 
 // --- Resume context (for interrupt forms) ---
 
-const ResumeContext = createContext<
+const ResumeContext = React.createContext<
   (values: Record<string, string | string[]>) => Promise<void>
 >(async () => { });
 export function useResume() {
@@ -209,89 +220,173 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
     }
   }, [stream.error]);
 
-  // --- Derived: live messages (computed, NOT state — breaks the infinite loop) ---
-  //
-  // ROOT CAUSE: stream.messages is a getter that returns a NEW array on every
-  // render. Using it as a useEffect dependency causes effect → setState →
-  // re-render → effect → ... → "Maximum update depth exceeded".
-  //
-  // FIX: Use useMemo with primitive/stable dependency keys instead of the
-  // stream.messages reference. The dep key captures:
-  //   1. stream.messages.length — changes when a new message arrives
-  //   2. last message content — changes on every streaming token
-  //   3. stream.isLoading — changes when stream starts/ends
-  //   4. historyMessages — changes when history is (re)loaded
-  const liveMessages = useMemo(() => {
-    const sm = stream.messages ?? [];
-    const historyKeys = new Set(historyMessages.map(messageKey));
-    return sm.filter(
-      (m: any) => !historyKeys.has(messageKey(m)) && !isHiddenMessage(m),
-    );
+  // ─── RAF-throttled + reference-stabilized message display ───────────
+  // stream.messages returns a NEW array (and new objects) on every access.
+  // Without throttling, each streaming token triggers an expensive full-tree
+  // re-render. We batch updates to ~60fps via requestAnimationFrame and
+  // stabilize message references so React.memo in child components works.
+  const [displayedMessages, setDisplayMessages] = useState<any[]>([]);
+  const messageCacheRef = useRef<Map<string, any>>(new Map());
+  const latestStreamRef = useRef<{ messages: any[]; isLoading: boolean }>({
+    messages: [],
+    isLoading: false,
+  });
+  latestStreamRef.current = { messages: stream.messages, isLoading: stream.isLoading };
+  const rafIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const scheduleUpdate = () => {
+      if (rafIdRef.current !== null) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        const { messages: rawMsgs, isLoading: loading } = latestStreamRef.current;
+        const cache = messageCacheRef.current;
+        const sm = rawMsgs ?? [];
+
+        // 1) Filter hidden
+        const visible = sm.filter((m: any) => !isHiddenMessage(m));
+
+        // 2) Stabilize references: cache by id + content length + tool_calls
+        const stableMessages: any[] = [];
+        for (const msg of visible) {
+          const id = msg?.id || msg?.message_id || "";
+          const len = typeof msg?.content === "string" ? msg.content.length : JSON.stringify(msg?.content ?? "").length;
+          // Include tool_calls in cache key so that newly arrived tool calls
+          // invalidate the cache and return the updated message reference.
+          const tcs = Array.isArray(msg?.tool_calls) ? msg.tool_calls.length : 0;
+          const tcIds = tcs > 0 ? `:${msg.tool_calls.map((tc: any) => tc?.id || tc?.name || "").join(",")}` : "";
+          const key = `${id}|${len}|${tcs}${tcIds}`;
+          const cached = cache.get(key);
+          if (cached) {
+            stableMessages.push(cached);
+          } else {
+            cache.set(key, msg);
+            stableMessages.push(msg);
+          }
+        }
+
+        // 3) Filter against history (inline liveMessages)
+        const historyKeys = new Set(historyMessages.map(messageKey));
+        const live = stableMessages.filter((m: any) => !historyKeys.has(messageKey(m)));
+
+        // 4) Merge history + live
+        const merged = mergeMessages(historyMessages, live);
+
+        // 5) Skip update if content is identical (avoids redundant render)
+        setDisplayMessages((prev) => {
+          if (
+            prev.length === merged.length &&
+            prev.every((m, i) => m === merged[i])
+          ) {
+            return prev;
+          }
+          return merged;
+        });
+
+        // Chain another RAF if stream is still active (ensures smooth 60fps)
+        if (loading) {
+          rafIdRef.current = requestAnimationFrame(() => {
+            rafIdRef.current = null;
+            scheduleUpdate();
+          });
+        }
+      });
+    };
+
+    scheduleUpdate();
+
+    // Force immediate sync when loading ends (don't wait for next RAF)
+    if (!stream.isLoading) {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      const { messages: rawMsgs } = latestStreamRef.current;
+      const sm = rawMsgs ?? [];
+      const visible = sm.filter((m: any) => !isHiddenMessage(m));
+      const historyKeys = new Set(historyMessages.map(messageKey));
+      const live = visible.filter((m: any) => !historyKeys.has(messageKey(m)));
+      setDisplayMessages(mergeMessages(historyMessages, live));
+    }
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    stream.messages.length,
-    stream.messages.length > 0
-      ? JSON.stringify((stream.messages[stream.messages.length - 1] as any)?.content ?? "").slice(0, 200)
-      : "",
-    stream.isLoading,
-    historyMessages,
-  ]);
+  }, [stream.messages, stream.isLoading, historyMessages]);
 
-  // Merge history + live for display
-  const allMessages = useMemo(() => {
-    return mergeMessages(historyMessages, liveMessages);
-  }, [historyMessages, liveMessages]);
-
+  // ─── Stable submit / stop callbacks (prevent context value churn) ─────
   const streamRef = useRef(stream);
   streamRef.current = stream;
+  const submitStateRef = useRef({ workspaceId, pptStyle, voiceId, currentPptTaskId, onPptTaskIdConsumed });
+  submitStateRef.current = { workspaceId, pptStyle, voiceId, currentPptTaskId, onPptTaskIdConsumed };
 
-  const handleSubmit = (content: string) => {
+  const stableSubmit = useCallback((content: string) => {
+    const s = submitStateRef.current;
     streamRef.current.submit(
       {
         messages: [{ type: "human", content }],
-        workspace_id: workspaceId,
-        ppt_style: pptStyle || "",
-        voice_id: voiceId || "",
-        current_ppt_task_id: currentPptTaskId || "",
+        workspace_id: s.workspaceId,
+        ppt_style: s.pptStyle || "",
+        voice_id: s.voiceId || "",
+        current_ppt_task_id: s.currentPptTaskId || "",
       },
       { config: { recursion_limit: 30 } },
     );
-    if (currentPptTaskId) {
-      onPptTaskIdConsumed?.();
+    if (s.currentPptTaskId) {
+      s.onPptTaskIdConsumed?.();
     }
-  };
+  }, []);
 
-  const handleResume = async (values: Record<string, string | string[]>) => {
+  const stableStop = useCallback(() => {
+    streamRef.current.stop();
+  }, []);
+
+  const handleResume = useCallback(async (values: Record<string, string | string[]>) => {
     await streamRef.current.submit(null, { command: { resume: values } });
-  };
+  }, []);
+
+  // ─── Memoized context values (only re-render consumers when data actually changes) ─────
+  const controlValue = useMemo<StreamControlValue>(() => ({
+    isLoading: stream.isLoading,
+    interrupt: stream.interrupt,
+    submit: stableSubmit,
+    stop: stableStop,
+    error: stream.error != null ? new Error(String(stream.error)) : null,
+    loadOlderMessages,
+    hasOlderMessages: historyNextCursor !== null,
+    isLoadingOlderMessages,
+    externalCommand: externalCommand ?? null,
+    onExternalCommandConsumed,
+    threadId,
+  }), [
+    stream.isLoading, stream.interrupt, stableSubmit, stableStop, stream.error,
+    loadOlderMessages, historyNextCursor, isLoadingOlderMessages,
+    externalCommand, onExternalCommandConsumed, threadId,
+  ]);
+
+  const messageValue = useMemo<MessageContextValue>(() => ({
+    messages: displayedMessages,
+  }), [displayedMessages]);
 
   return (
-    <StreamContext.Provider
-      value={{
-        messages: allMessages,
-        isLoading: stream.isLoading,
-        interrupt: stream.interrupt,
-        submit: handleSubmit,
-        stop: () => streamRef.current.stop(),
-        error: stream.error != null ? new Error(String(stream.error)) : null,
-        loadOlderMessages,
-        hasOlderMessages: historyNextCursor !== null,
-        isLoadingOlderMessages,
-        externalCommand: externalCommand ?? null,
-        onExternalCommandConsumed,
-        threadId,
-      }}
-    >
-      <ResumeContext.Provider value={handleResume}>
-        {children}
-      </ResumeContext.Provider>
-    </StreamContext.Provider>
+    <StreamControlContext.Provider value={controlValue}>
+      <MessageContext.Provider value={messageValue}>
+        <ResumeContext.Provider value={handleResume}>
+          {children}
+        </ResumeContext.Provider>
+      </MessageContext.Provider>
+    </StreamControlContext.Provider>
   );
 }
 
 function toLangGraphMessage(message: ThreadMessage) {
   return {
     id: message.message_id,
+    _rowId: message.id, // database auto-increment id for stable ordering
     type: message.type || message.role,
     content: message.content,
     tool_calls: message.tool_calls ?? [],
@@ -352,5 +447,15 @@ function mergeMessages(history: any[], live: any[]) {
     seen.add(key);
     merged.push(message);
   }
+  // Sort by database row id (_rowId) for stable chronological order.
+  // History messages carry _rowId (auto-increment int); live stream messages
+  // without _rowId are placed at the end (they are always the newest).
+  merged.sort((a, b) => {
+    const aId = typeof a._rowId === "number" ? a._rowId : Number.MAX_SAFE_INTEGER;
+    const bId = typeof b._rowId === "number" ? b._rowId : Number.MAX_SAFE_INTEGER;
+    if (aId !== bId) return aId - bId;
+    // Both without _rowId: preserve insertion order (stable sort)
+    return 0;
+  });
   return merged;
 }

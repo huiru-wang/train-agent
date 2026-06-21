@@ -13,7 +13,7 @@ from typing import Annotated
 
 from langchain_core.tools import tool
 
-from src.agent.skill_manager import SkillManager
+from src.managers.skill_manager import SkillManager
 
 logger = logging.getLogger(__name__)
 

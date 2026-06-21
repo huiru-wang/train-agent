@@ -93,7 +93,7 @@ If no knowledge-base documents are available, do not show `source_documents`. In
 Do not proceed with PPT generation when there are no documents and the user has not provided a concrete topic, outline, or source content.
 
 **Question 4 — Visual Style** (header: "Style"):
-If the system prompt contains a "用户配置偏好" section with a PPT visual style already selected, **skip this question entirely** and use the pre-selected style directly. Do not ask the user to choose a style again.
+If the system prompt contains a "用户配置偏好" section with a PPT visual style already selected **and a "风格详细描述" subsection**, **skip this question entirely** and use the pre-selected style directly. Use the detailed style description (colors, typography, layout, signature elements) from the system prompt when generating — do not ask the user to choose a style again.
 
 If no pre-selected style is available, ask the user to choose. Options:
 
@@ -158,10 +158,15 @@ Output the outline as Markdown in this structure:
 ## PPT 大纲确认
 
 主题：...
+
 目标受众：...
+
 用途：...
+
 预计页数：...
+
 视觉风格：...
+
 内容来源：...
 
 ### 幻灯片结构
@@ -235,7 +240,7 @@ The final presentation must follow the confirmed outline. You may split an overl
 **Before generating, read these supporting files:**
 
 - [html-template.md](references/html-template.md) — HTML architecture and JS features
-- [style-presets.md](references/style-presets.md) — Detailed visual preset guidance
+- [style-guide.md](references/style-guide.md) — CSS rules, anti-patterns, font reference
 - [viewport-base.css](assets/viewport-base.css) — Mandatory CSS (include in full)
 - [animation-patterns.md](references/animation-patterns.md) — Animation reference for the selected style and presentation tone
 
@@ -243,9 +248,10 @@ The final presentation must follow the confirmed outline. You may split an overl
 
 - Single self-contained HTML file, all CSS/JS inline
 - Include the FULL contents of viewport-base.css in the `<style>` block
-- Use fonts from Fontshare or Google Fonts — never system fonts
+- Use fonts from fonts.loli.net (China-accessible Google Fonts mirror) — never system fonts, never api.fontshare.com
 - Add detailed comments explaining each section
 - Every section needs a clear `/* === SECTION NAME === */` comment block
+- **严禁在幻灯片内容中出现任何来源引用标记**：包括 `{{ref:...}}`、`ref:文档名|章节`、`📄 文件名 | 位置`、`[片段N]` 等一切形式。RAG 检索返回的来源标注仅供你理解内容出处，绝不能写入最终 HTML。
 
 ---
 
@@ -318,7 +324,7 @@ Summarize — Tell the user:
 
 | File                                               | Purpose                                                              | When to Read              |
 | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
-| [style-presets.md](references/style-presets.md)               | 12 curated visual presets with colors, fonts, and signature elements | Phase 3 (generation)      |
+| [style-guide.md](references/style-guide.md)                   | CSS rules, anti-patterns, font pairing reference                     | Phase 3 (generation)      |
 | [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3 (generation)      |
 | [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3 (generation)      |
 | [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3 (generation)      |

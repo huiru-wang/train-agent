@@ -1,7 +1,7 @@
 "use client";
 
 import { Assistant, type ExternalCommand } from "./assistant";
-import { Thread } from "./thread";
+import { StableMessageList } from "./thread";
 
 interface ChatPanelProps {
   workspaceId: string;
@@ -24,7 +24,7 @@ export function ChatPanel({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
       externalCommand={externalCommand}
       onExternalCommandConsumed={onExternalCommandConsumed}
     >
-      <Thread />
+      <StableMessageList />
     </Assistant>
   );
 }

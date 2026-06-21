@@ -2,90 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Play, Pause } from "lucide-react";
-
-export interface Voice {
-  id: string;
-  name: string;
-  gender: string;
-  trait: string;
-  audioUrl: string;
-}
-
-export const VOICES: Voice[] = [
-  {
-    id: "Cherry",
-    name: "芊悦",
-    trait: "阳光积极、亲切自然小姐姐",
-    gender: "female",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/tixcef/cherry.wav",
-  },
-  {
-    id: "Ethan",
-    name: "晨煦",
-    trait: "阳光、温暖、活力、朝气的男生",
-    gender: "male",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/emaqdp/ethan.wav",
-  },
-  {
-    id: "Chelsie",
-    name: "千雪",
-    trait: "二次元虚拟女友",
-    gender: "female",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250211/vnpxgw/chelsie.wav",
-  },
-  {
-    id: "Vivian",
-    name: "十三",
-    trait: "拽拽的、可爱的小暴躁",
-    gender: "female",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/eetwkj/Vivian.wav",
-  },
-  {
-    id: "Eldric Sage",
-    name: "沧明子",
-    trait: "沉稳睿智的老者",
-    gender: "male",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/hbvhwj/Eldric+Sage.wav",
-  },
-  {
-    id: "Vincent",
-    name: "田叔",
-    trait: "沙哑烟嗓",
-    gender: "male",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/skfrkq/Vincent.wav",
-  },
-  {
-    id: "Neil",
-    name: "阿闻",
-    trait: "专业的新闻主持人",
-    gender: "male",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/ucmfkt/Neil.wav",
-  },
-  {
-    id: "Bellona",
-    name: "燕铮莺",
-    trait: "声音洪亮、字正腔圆江湖",
-    gender: "female",
-    audioUrl:
-      "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20251120/wztwli/Bellona.wav",
-  },
-];
+import type { VoiceInfo } from "@/lib/api";
 
 interface VoicePickerDialogProps {
   selectedId: string;
+  voices: VoiceInfo[];
   onSelect: (voiceId: string) => void;
   onClose: () => void;
 }
 
 export function VoicePickerDialog({
   selectedId,
+  voices,
   onSelect,
   onClose,
 }: VoicePickerDialogProps) {
@@ -120,13 +48,13 @@ export function VoicePickerDialog({
     };
   }, []);
 
-  const togglePlay = (voice: Voice) => {
+  const togglePlay = (voice: VoiceInfo) => {
     if (playingId === voice.id) {
       audioRef.current?.pause();
       setPlayingId(null);
     } else {
       audioRef.current?.pause();
-      const audio = new Audio(voice.audioUrl);
+      const audio = new Audio(voice.audio_url);
       audio.onended = () => setPlayingId(null);
       audio.onerror = () => setPlayingId(null);
       audio.play();
@@ -155,7 +83,7 @@ export function VoicePickerDialog({
         {/* Voice list */}
         <div className="flex-1 overflow-y-auto p-4">
           <div className="flex flex-col gap-3">
-            {VOICES.map((voice) => {
+            {voices.map((voice) => {
               const isSelected = voice.id === selectedId;
               const isPlaying = playingId === voice.id;
               return (

@@ -15,16 +15,19 @@ import {
   ChevronRight,
   Play,
   Eye,
+  Palette,
+  Ban,
 } from "lucide-react";
-import { listTasks, deleteTask, type Task } from "@/lib/api";
-import { PPT_STYLES } from "@/components/config/style-picker-dialog";
-import { VOICES } from "@/components/config/voice-picker-dialog";
+import { listTasks, deleteTask, type Task, type PptStyleInfo, type VoiceInfo } from "@/lib/api";
 
 interface TaskPanelProps {
   workspaceId: string;
+  styles: PptStyleInfo[];
+  voices: VoiceInfo[];
   onNarrate?: (taskId: string, title: string) => void;
   onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
   onPreview?: (task: Task) => void;
+  onViewStyleExtraction?: (task: Task) => void;
 }
 
 const TYPE_CONFIG: Record<
@@ -34,6 +37,7 @@ const TYPE_CONFIG: Record<
   ppt: { icon: Presentation, label: "PPT" },
   report: { icon: FileText, label: "报告" },
   narration: { icon: Mic, label: "口播稿" },
+  ppt_style_extraction: { icon: Palette, label: "风格提取" },
 };
 
 const STATUS_CONFIG = {
@@ -53,6 +57,12 @@ const STATUS_CONFIG = {
     icon: Package,
     color: "text-red-500",
     label: "失败",
+    animate: false,
+  },
+  cancelled: {
+    icon: Ban,
+    color: "text-muted-foreground",
+    label: "已取消",
     animate: false,
   },
   narrating: {
@@ -75,7 +85,7 @@ const STATUS_CONFIG = {
   },
 } as const;
 
-export function TaskPanel({ workspaceId, onNarrate, onPlayNarration, onPreview }: TaskPanelProps) {
+export function TaskPanel({ workspaceId, styles, voices, onNarrate, onPlayNarration, onPreview, onViewStyleExtraction }: TaskPanelProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const fetchTasks = useCallback(async () => {
@@ -116,10 +126,13 @@ export function TaskPanel({ workspaceId, onNarrate, onPlayNarration, onPreview }
                 key={task.id}
                 task={task}
                 workspaceId={workspaceId}
+                styles={styles}
+                voices={voices}
                 onDeleted={fetchTasks}
                 onNarrate={onNarrate}
                 onPlayNarration={onPlayNarration}
                 onPreview={onPreview}
+                onViewStyleExtraction={onViewStyleExtraction}
               />
             ))}
           </div>
@@ -132,13 +145,16 @@ export function TaskPanel({ workspaceId, onNarrate, onPlayNarration, onPreview }
 interface TaskItemGroupProps {
   task: Task;
   workspaceId: string;
+  styles: PptStyleInfo[];
+  voices: VoiceInfo[];
   onDeleted: () => void;
   onNarrate?: (taskId: string, title: string) => void;
   onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
   onPreview?: (task: Task) => void;
+  onViewStyleExtraction?: (task: Task) => void;
 }
 
-function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, onPreview }: TaskItemGroupProps) {
+function TaskItemGroup({ task, workspaceId, styles, voices, onDeleted, onNarrate, onPlayNarration, onPreview, onViewStyleExtraction }: TaskItemGroupProps) {
   const [expanded, setExpanded] = useState(true);
   const prevChildCount = useRef(task.children?.length ?? 0);
 
@@ -156,9 +172,12 @@ function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate, onPlayNarratio
       <TaskItem
         task={task}
         workspaceId={workspaceId}
+        styles={styles}
+        voices={voices}
         onDeleted={onDeleted}
         onNarrate={onNarrate}
         onPreview={onPreview}
+        onViewStyleExtraction={onViewStyleExtraction}
         canExpand={hasChildren}
         expanded={expanded}
         onToggleExpand={() => setExpanded(!expanded)}
@@ -171,6 +190,8 @@ function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate, onPlayNarratio
               key={child.id}
               task={child}
               workspaceId={workspaceId}
+              styles={styles}
+              voices={voices}
               onDeleted={onDeleted}
               onPlayNarration={onPlayNarration}
               parentTask={task}
@@ -185,17 +206,20 @@ function TaskItemGroup({ task, workspaceId, onDeleted, onNarrate, onPlayNarratio
 interface TaskItemProps {
   task: Task;
   workspaceId: string;
+  styles: PptStyleInfo[];
+  voices: VoiceInfo[];
   onDeleted: () => void;
   onNarrate?: (taskId: string, title: string) => void;
   onPlayNarration?: (narrationTask: Task, pptTask: Task) => void;
   onPreview?: (task: Task) => void;
+  onViewStyleExtraction?: (task: Task) => void;
   parentTask?: Task;
   canExpand?: boolean;
   expanded?: boolean;
   onToggleExpand?: () => void;
 }
 
-function TaskItem({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, onPreview, parentTask, canExpand, expanded, onToggleExpand }: TaskItemProps) {
+function TaskItem({ task, workspaceId, styles, voices, onDeleted, onNarrate, onPlayNarration, onPreview, onViewStyleExtraction, parentTask, canExpand, expanded, onToggleExpand }: TaskItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -219,19 +243,30 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, on
     const total = resultData.slides?.length || "?";
     statusLabel = `音频生成中 ${progress}/${total}`;
   }
+  if (task.type === "ppt_style_extraction" && task.status === "generating" && resultData?.progress_step) {
+    const STEP_LABELS: Record<string, string> = {
+      parsing: "解析中",
+      analyzing_style: "分析风格",
+      generating_preview: "生成预览",
+    };
+    statusLabel = STEP_LABELS[resultData.progress_step] || "生成中";
+  }
 
   const hasDownload = task.status === "completed" && resultData?.file_path;
   const isPptCompleted = task.type === "ppt" && task.status === "completed";
   const canPlay = task.type === "narration" && task.status === "completed" && !!onPlayNarration && !!parentTask;
   const canPreview = task.type === "ppt" && task.status === "completed" && !!onPreview;
+  const canViewStyleExtraction = task.type === "ppt_style_extraction" && !!onViewStyleExtraction;
 
   // Derive style/voice name for subtitle
   const pptStyleName = task.type === "ppt" && resultData?.ppt_style
-    ? PPT_STYLES.find((s) => s.id === resultData.ppt_style)?.cn || resultData.ppt_style
+    ? styles.find((s) => s.name_en === resultData.ppt_style)?.name || resultData.ppt_style
     : "";
-  const voiceName = task.type === "narration" && resultData?.voice
-    ? VOICES.find((v) => v.id === resultData.voice)?.name || resultData.voice
-    : "";
+  const voiceName = task.type === "narration" && resultData?.voice_name
+    ? resultData.voice_name
+    : task.type === "narration" && resultData?.voice_id
+      ? voices.find((v) => v.id === resultData.voice_id)?.name || resultData.voice_id
+      : "";
 
   const handlePlay = () => {
     if (canPlay) onPlayNarration!(task, parentTask!);
@@ -284,15 +319,14 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, on
         className={`group flex items-start gap-2.5 rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/50 ${canExpand ? "cursor-pointer" : ""}`}
         onClick={canExpand ? onToggleExpand : undefined}
       >
-        {/* Left icon: chevron for expandable, type icon otherwise */}
-        <div className="mt-1 flex-shrink-0">
-          {canExpand ? (
+        {/* Left icon: always show type icon, chevron below for expandable */}
+        <div className="mt-1 flex flex-shrink-0 flex-col items-center gap-0.5">
+          <TypeIcon size={15} className="text-accent/70" />
+          {canExpand && (
             <ChevronRight
-              size={12}
-              className={`text-muted-foreground/60 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
+              size={10}
+              className={`text-muted-foreground/50 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}
             />
-          ) : (
-            <TypeIcon size={15} className="text-accent/70" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -334,6 +368,16 @@ function TaskItem({ task, workspaceId, onDeleted, onNarrate, onPlayNarration, on
             onClick={(e) => { e.stopPropagation(); onPreview!(task); }}
             className="mt-0.5 flex-shrink-0 rounded p-1 text-accent/70 opacity-0 transition-all hover:text-accent group-hover:opacity-100"
             title="预览 PPT"
+          >
+            <Eye size={13} />
+          </button>
+        )}
+        {/* View button for style extraction */}
+        {canViewStyleExtraction && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onViewStyleExtraction!(task); }}
+            className="mt-0.5 flex-shrink-0 rounded p-1 text-accent/70 opacity-0 transition-all hover:text-accent group-hover:opacity-100"
+            title="查看风格提取"
           >
             <Eye size={13} />
           </button>

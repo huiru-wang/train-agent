@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState, useEffect, type FormEvent, type ReactNode } from "react";
+import { memo, useCallback, useLayoutEffect, useRef, useState, useEffect, type FormEvent, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -20,7 +20,7 @@ import {
   Zap,
   Mic,
 } from "lucide-react";
-import { useStreamContext, useResume } from "./assistant";
+import { useStreamContext, useMessageContext, useResume } from "./assistant";
 import { ClarifyForm } from "./clarify-form";
 import { getMessageDetail } from "@/lib/api";
 
@@ -153,11 +153,9 @@ function isNearBottom(element: HTMLElement): boolean {
 // Thread (root)
 // ============================================================
 
-export function Thread() {
+export function Thread({ visibleMessages, isLoading }: { visibleMessages: any[]; isLoading: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const {
-    messages,
-    isLoading,
     error,
     loadOlderMessages,
     hasOlderMessages,
@@ -166,7 +164,6 @@ export function Thread() {
   const shouldStickToBottom = useRef(true);
   const historyPrependSnapshot = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const initialScrollDone = useRef(false);
-  const visibleMessages = messages.filter((message) => !isHiddenMessage(message));
   const hasMessages = visibleMessages.length > 0;
 
   // Reset initial scroll flag when messages clear (e.g. workspace switch)
@@ -255,6 +252,17 @@ export function Thread() {
 }
 
 // ============================================================
+// StableMessageList (subscribes to throttled MessageContext)
+// ============================================================
+
+export function StableMessageList() {
+  const { messages } = useMessageContext();
+  const { isLoading } = useStreamContext();
+  const visibleMessages = messages.filter((m: any) => !isHiddenMessage(m));
+  return <Thread visibleMessages={visibleMessages} isLoading={isLoading} />;
+}
+
+// ============================================================
 // Message list
 // ============================================================
 
@@ -330,7 +338,7 @@ type RenderItem =
   | { kind: "text"; key: string; text: string }
   | { kind: "toolcall"; key: string; tc: ExtractedToolCall; result: any };
 
-function AITurnBubble({ turn }: { turn: AITurn }) {
+const AITurnBubble = memo(function AITurnBubble({ turn }: { turn: AITurn }) {
   const effectiveToolMessages = turn.toolMessages;
 
   // --- Step 1: Collect all tool calls to build the result map ---
@@ -502,7 +510,15 @@ function AITurnBubble({ turn }: { turn: AITurn }) {
       </div>
     </div>
   );
-}
+}, (prev, next) => {
+  // Skip re-render if the turn has the same ID and identical message references.
+  // This prevents unchanged historical turns from re-rendering during streaming.
+  if (prev.turn.id !== next.turn.id) return false;
+  if (prev.turn.aiMessages.length !== next.turn.aiMessages.length) return false;
+  if (prev.turn.toolMessages.length !== next.turn.toolMessages.length) return false;
+  return prev.turn.aiMessages.every((m, i) => m === next.turn.aiMessages[i]) &&
+    prev.turn.toolMessages.every((m, i) => m === next.turn.toolMessages[i]);
+});
 
 // ============================================================
 // Tool call cards
@@ -1047,7 +1063,7 @@ function InterruptBlock() {
 // Regex to extract PPT reference tag from message content
 const PPT_REF_TAG_REGEX = /\[ppt-ref:([a-f0-9-]+):([^\]]+)\]/;
 
-function HumanBubble({
+const HumanBubble = memo(function HumanBubble({
   text,
   pending,
 }: {
@@ -1089,7 +1105,7 @@ function HumanBubble({
       </div>
     </div>
   );
-}
+}, (prev, next) => prev.text === next.text && prev.pending === next.pending);
 
 function TypingIndicator() {
   return (
