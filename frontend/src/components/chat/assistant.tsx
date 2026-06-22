@@ -205,11 +205,13 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
   // Auto-recover from stale threadId
   useEffect(() => {
     if (stream.error) {
-      console.error("[Assistant] stream error:", stream.error);
       const msg =
         stream.error instanceof Error
           ? stream.error.message
           : String(stream.error);
+      // CancelledError = 主动取消（组件卸载/stop()），属于预期行为，无需报错
+      if (msg.includes("CancelledError")) return;
+      console.error("[Assistant] stream error:", stream.error);
       if (
         msg.includes("404") ||
         msg.includes("not found") ||
@@ -316,7 +318,7 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stream.messages, stream.isLoading, historyMessages]);
+  }, [stream.messages.length, stream.isLoading, historyMessages]);
 
   // ─── Stable submit / stop callbacks (prevent context value churn) ─────
   const streamRef = useRef(stream);

@@ -148,13 +148,22 @@ export function StylePickerDialog({
                             onClick={() => onSelect(style.name_en)}
                             className="relative block aspect-[16/10] w-full cursor-pointer overflow-hidden bg-muted"
                           >
-                            <iframe
-                              src={`${getPreviewUrl(style)}?thumb=1`}
-                              title={style.name}
-                              className="h-full w-full border-0 pointer-events-none"
-                              loading="lazy"
-                              tabIndex={-1}
-                            />
+                            {isCustom ? (
+                              <iframe
+                                src={`${getPreviewUrl(style)}?thumb=1`}
+                                title={style.name}
+                                className="h-full w-full border-0 pointer-events-none"
+                                loading="lazy"
+                                tabIndex={-1}
+                              />
+                            ) : (
+                              <img
+                                src={`/ppt-styles/${style.preview_path.replace(/\.html$/, '.png')}`}
+                                alt={style.name}
+                                className="h-full w-full object-cover pointer-events-none"
+                                loading="lazy"
+                              />
+                            )}
                             {isSelected && (
                               <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-accent">
                                 <Check size={12} className="text-background" />
