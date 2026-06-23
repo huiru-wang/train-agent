@@ -31,6 +31,7 @@ graceful_stop() {
 
 graceful_stop "后端 API" 8000
 graceful_stop "LangGraph" 2024
+graceful_stop "ChromaDB" 8001
 graceful_stop "前端" 3000
 
 # Clean pid files

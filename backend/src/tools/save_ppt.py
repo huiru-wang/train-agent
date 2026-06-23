@@ -41,9 +41,10 @@ async def save_ppt_artifact(
     outline: str = "",
 ) -> tuple[dict, str]:
     """Save a PPT artifact to the file store and create a task record in DB."""
-    if not filename:
-        safe_title = title.replace(" ", "_").replace("/", "_")
-        filename = f"{safe_title}.html"
+    # Always derive filename from title (Chinese) to ensure readable download names.
+    # The LLM may pass an English filename — ignore it in favor of the user-visible title.
+    safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    filename = f"{safe_title}.html"
 
     task = await db.create_task(
         workspace_id=workspace_id, type="ppt", title=title
@@ -58,9 +59,10 @@ async def save_ppt_artifact(
             content = cleaned
 
         content_bytes = content.encode("utf-8")
-        file_path = await file_store.save_async(
+        file_path = await file_store.save_ppt_file(
             workspace_id,
-            f"outputs/{task['id']}/{filename}",
+            task["id"],
+            filename,
             content_bytes,
         )
         logger.info("[save_ppt] file saved: %s (%d bytes)", file_path, len(content_bytes))

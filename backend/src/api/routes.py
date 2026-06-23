@@ -1,12 +1,13 @@
 import json
 import logging
-import shutil
+import re
 from mimetypes import guess_type
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -198,15 +199,11 @@ async def delete_task(workspace_id: str, task_id: str):
     # Cascade delete from DB (returns all deleted task IDs)
     deleted_ids = await db.delete_task(task_id)
 
-    # --- File cleanup ---
-    output_base = Path(file_store.base_dir) / workspace_id / "outputs"
-
+    # --- File cleanup (delegated to FileStore for local/OSS transparency) ---
     if task["type"] == "ppt":
-        # PPT: remove entire outputs/{ppt_task_id}/ directory
-        ppt_dir = output_base / task_id
-        if ppt_dir.exists():
-            shutil.rmtree(ppt_dir, ignore_errors=True)
-            logger.info("[API] removed PPT output directory: %s", ppt_dir)
+        # PPT: remove entire ppt/{ppt_task_id}/ directory
+        await file_store.delete_ppt_task_dir(workspace_id, task_id)
+        logger.info("[API] removed PPT output directory for task: %s", task_id)
     elif task["type"] == "narration":
         # Narration: delete individual files from result_data
         result_data = {}
@@ -219,19 +216,16 @@ async def delete_task(workspace_id: str, task_id: str):
         for slide in result_data.get("slides", []):
             audio_path = slide.get("audio_path")
             if audio_path:
-                p = Path(audio_path)
-                if p.exists():
-                    p.unlink(missing_ok=True)
+                await file_store.delete_async(audio_path)
         # Delete narration text file
-        for f in output_base.rglob(f"{task_id}_narration.md"):
-            f.unlink(missing_ok=True)
+        text_file_path = result_data.get("text_file_path")
+        if text_file_path:
+            await file_store.delete_async(text_file_path)
         logger.info("[API] cleaned narration files for task: %s", task_id)
     elif task["type"] == "ppt_style_extraction":
-        # Style extraction: remove outputs/{task_id}/ directory
-        se_dir = output_base / task_id
-        if se_dir.exists():
-            shutil.rmtree(se_dir, ignore_errors=True)
-            logger.info("[API] removed style extraction output directory: %s", se_dir)
+        # Style extraction: remove style/{task_id}/ directory
+        await file_store.delete_style_task_dir(workspace_id, task_id)
+        logger.info("[API] removed style extraction output directory for task: %s", task_id)
 
     return {"ok": True, "deleted_ids": deleted_ids}
 
@@ -252,10 +246,9 @@ async def save_task_file(workspace_id: str, task_id: str, req: SaveTaskFileReque
     file_path = result_data.get("file_path", "")
     if not file_path:
         raise HTTPException(status_code=404, detail="File path not found in task result_data")
-    resolved = Path(file_path)
-    if not resolved.exists():
+    if not await file_store.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found on disk")
-    resolved.write_text(req.content, encoding="utf-8")
+    await file_store.write_text(file_path, req.content)
     logger.info("[API] saved task file: %s (%d bytes)", file_path, len(req.content))
     return {"ok": True}
 
@@ -275,7 +268,8 @@ async def submit_style_extraction(
         raise HTTPException(status_code=400, detail="Only .pptx files are accepted")
 
     content = await file.read()
-    pptx_path = await file_store.save_async(workspace_id, file.filename, content)
+    # PPTX is a temporary file — do NOT save to storage.
+    # It will be written to a temp dir inside run_extraction and cleaned up automatically.
 
     task = await db.create_task(
         workspace_id=workspace_id,
@@ -284,7 +278,10 @@ async def submit_style_extraction(
     )
     logger.info("[API] style extraction task created: id=%s", task["id"])
 
-    background_tasks.add_task(style_extract_manager.run_extraction, task["id"], workspace_id, pptx_path)
+    background_tasks.add_task(
+        style_extract_manager.run_extraction,
+        task["id"], workspace_id, content, file.filename,
+    )
     return task
 
 
@@ -313,11 +310,8 @@ async def delete_style_extraction(workspace_id: str, task_id: str):
 
     deleted_ids = await db.delete_task(task_id)
 
-    output_base = Path(file_store.base_dir) / workspace_id / "outputs"
-    se_dir = output_base / task_id
-    if se_dir.exists():
-        shutil.rmtree(se_dir, ignore_errors=True)
-        logger.info("[API] removed style extraction output directory: %s", se_dir)
+    await file_store.delete_style_task_dir(workspace_id, task_id)
+    logger.info("[API] removed style extraction output directory for task: %s", task_id)
 
     return {"ok": True, "deleted_ids": deleted_ids}
 
@@ -369,33 +363,115 @@ async def delete_ppt_style(style_id: str):
         raise HTTPException(status_code=403, detail="Cannot delete system styles")
     # Delete preview file and its directory if it exists
     preview_path = style.get("preview_path", "")
-    if preview_path and "/" in preview_path:
-        p = Path(preview_path)
-        if p.exists():
-            # Remove the style directory (parent of preview.html)
-            style_dir = p.parent
-            shutil.rmtree(style_dir, ignore_errors=True)
+    if preview_path:
+        if file_store.is_local_path(preview_path):
+            # Local path (legacy or new): delete the directory containing the preview
+            style_dir = Path(preview_path).parent
+            await file_store.delete_dir(str(style_dir))
             logger.info("[API] deleted style directory: %s", style_dir)
+        else:
+            # OSS: use delete_user_style which handles prefix deletion
+            await file_store.delete_user_style(style["user_id"], style_id)
+            logger.info("[API] deleted style files for user=%s style=%s", style["user_id"], style_id)
     await db.delete_ppt_style(style_id)
     return {"ok": True}
 
 
+# Regex for stripping external font <link> tags (Google Fonts, loli, fontshare, gstatic)
+_FONT_LINK_RE = re.compile(
+    r'<link[^>]*href=["\'][^"\']*(?:fonts\.googleapis|fonts\.loli|fontshare|gstatic)[^"\']*["\'][^>]*/?>',
+    re.IGNORECASE,
+)
+
+
+async def _serve_file(file_path: str, disposition: str, thumb: int = 0):
+    """Unified file serving via FileStore (local / OSS transparent).
+
+    Parameters
+    ----------
+    file_path:   relative key like ``user/{user_id}/workspace/...``
+    disposition: ``"attachment"`` (download) or ``"inline"`` (preview)
+    thumb:       when 1 and file is HTML, strip external font <link> tags
+    """
+    if not await file_store.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = await file_store.read(file_path)
+    mime, _ = guess_type(file_path)
+    filename = Path(file_path).name
+
+    # HTML + thumb mode: strip external font links to avoid render blocking
+    if thumb and (mime or "").startswith("text/html"):
+        html_text = content.decode("utf-8", errors="replace")
+        html_text = _FONT_LINK_RE.sub("", html_text)
+        return Response(
+            content=html_text,
+            media_type="text/html; charset=utf-8",
+            headers={
+                "Content-Disposition": disposition,
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
+
+    # Build Content-Disposition header
+    if disposition == "attachment":
+        # filename= must be ASCII-safe (HTTP headers are latin-1);
+        # filename*=UTF-8 carries the real name for modern browsers (RFC 5987).
+        ascii_name = filename.encode("ascii", errors="replace").decode("ascii")
+        disp = f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(filename, safe='')}"
+    else:
+        disp = "inline"
+
+    return Response(
+        content=content,
+        media_type=mime or "application/octet-stream",
+        headers={
+            "Content-Disposition": disp,
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
+
+
+@app.get("/api/tasks/{task_id}/download")
+async def download_task_file(task_id: str):
+    """Download the output file of a task (Content-Disposition: attachment).
+
+    Frontend only needs the taskId — the backend resolves the file path
+    from the task's result_data, keeping storage details encapsulated.
+    """
+    logger.info("[API] GET /api/tasks/%s/download", task_id)
+    task = await db.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    result_data = json.loads(task.get("result_data") or "{}")
+    if not isinstance(result_data, dict):
+        result_data = {}
+    file_path = result_data.get("file_path")
+    if not file_path:
+        raise HTTPException(status_code=404, detail="No downloadable file for this task")
+    return await _serve_file(file_path, disposition="attachment")
+
+
 @app.get("/api/files/{file_path:path}")
 async def download_file(file_path: str):
-    """Download a file by its storage path. Supports output files and documents."""
+    """Download a file by its storage path (Content-Disposition: attachment).
+
+    For inline preview, use GET /api/file-view/{file_path} instead.
+    """
     logger.info("[API] GET /api/files/%s", file_path)
-    resolved = Path(file_path)
-    if not resolved.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    mime, _ = guess_type(str(resolved))
-    response = FileResponse(
-        path=str(resolved),
-        filename=resolved.name,
-        media_type=mime or "application/octet-stream",
-    )
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    return response
+    return await _serve_file(file_path, disposition="attachment")
+
+
+@app.get("/api/file-view/{file_path:path}")
+async def view_file(file_path: str, thumb: int = Query(default=0)):
+    """Serve a file inline for browser preview (Content-Disposition: inline).
+
+    When thumb=1 and file is HTML, external font <link> tags are stripped.
+    """
+    logger.info("[API] GET /api/file-view/%s thumb=%s", file_path, thumb)
+    return await _serve_file(file_path, disposition="inline", thumb=thumb)
 
 
 # --- Static assets for PPT skill ---
@@ -413,19 +489,47 @@ for mount_path, directory in _static_mounts.items():
 
 
 @app.get("/api/ppt-style-preview/{preview_path:path}")
-async def preview_ppt_style(preview_path: str):
-    """Serve PPT style preview HTML for both system and custom styles."""
-    logger.info("[API] GET /api/ppt-style-preview/%s", preview_path)
+async def preview_ppt_style(preview_path: str, thumb: int = Query(default=0)):
+    """Serve PPT style preview HTML for both system and custom styles.
+
+    - System styles: plain filename (e.g. "01-bold-signal.html") served from static/ppt-styles/
+    - Custom styles: served inline via FileStore (local or OSS)
+    """
+    logger.info("[API] GET /api/ppt-style-preview/%s thumb=%s", preview_path, thumb)
     builtin_dir = _static_dir / "ppt-styles"
-    # System styles: plain filename (e.g. "01-bold-signal.html")
-    # Custom styles: path with separators (e.g. "data/files/.../preview.html")
+
+    # System styles: plain filename (no path separator)
     if "/" not in preview_path and "\\" not in preview_path:
         resolved = builtin_dir / preview_path
-    else:
-        resolved = Path(preview_path)
-    if not resolved.exists():
+        if not resolved.exists():
+            raise HTTPException(status_code=404, detail=f"Preview file not found: {preview_path}")
+        # For thumb mode, strip external font links
+        if thumb:
+            html_text = resolved.read_text(encoding="utf-8")
+            html_text = _FONT_LINK_RE.sub("", html_text)
+            return Response(
+                content=html_text,
+                media_type="text/html; charset=utf-8",
+                headers={"Cache-Control": "no-store, no-cache, must-revalidate", "Pragma": "no-cache"},
+            )
+        response = FileResponse(path=str(resolved), media_type="text/html")
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
+    # Custom styles: serve inline via FileStore (local or OSS transparent)
+    if not await file_store.exists(preview_path):
         raise HTTPException(status_code=404, detail=f"Preview file not found: {preview_path}")
-    response = FileResponse(path=str(resolved), media_type="text/html")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    return response
+    content = await file_store.read(preview_path)
+    html_text = content.decode("utf-8", errors="replace")
+    if thumb:
+        html_text = _FONT_LINK_RE.sub("", html_text)
+    return Response(
+        content=html_text,
+        media_type="text/html; charset=utf-8",
+        headers={
+            "Content-Disposition": "inline",
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )

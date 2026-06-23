@@ -49,7 +49,7 @@ class DocManager:
             len(content),
             workspace_id,
         )
-        storage_path = self.file_store.save(workspace_id, filename, content)
+        storage_path = await self.file_store.save_doc(workspace_id, filename, content)
         logger.info("[DocManager] file saved to: %s", storage_path)
         doc = await self.db.create_document(
             workspace_id=workspace_id,
@@ -73,8 +73,8 @@ class DocManager:
         try:
             # --- Structured parsing ---
             await self.db.update_document(doc_id, status="parsing", error_message=None)
-            content = Path(storage_path).read_bytes()
-            sections = self._parse_structured(file_type, content, storage_path)
+            content = await self.file_store.read(storage_path)
+            sections = self._parse_structured(file_type, content)
             logger.info("[DocManager] parsed %d sections", len(sections))
 
             # Plain text for summary generation + debug export
@@ -91,11 +91,20 @@ class DocManager:
 
             md_filename = Path(filename).stem + ".md"
             md_content = f"# {filename}\n\n{full_text}"
-            self.file_store.save(workspace_id, md_filename, md_content.encode("utf-8"))
+
+            # If source is already markdown, reuse the same file (no duplicate)
+            if file_type in ("markdown", "text"):
+                logger.info(
+                    "[DocManager] source is %s, skipping separate MD file", file_type
+                )
+            else:
+                await self.file_store.save_doc(
+                    workspace_id, md_filename, md_content.encode("utf-8")
+                )
+                logger.info(
+                    "[DocManager] parsed text saved as: docs/%s", md_filename
+                )
             await self.db.update_document(doc_id, status="parsed")
-            logger.info(
-                "[DocManager] parsed text saved as: %s/%s", workspace_id, md_filename
-            )
 
             # --- Section-aware chunking ---
             await self.db.update_document(doc_id, status="chunking")
@@ -149,25 +158,25 @@ class DocManager:
         docs = await self.db.list_documents(workspace_id)
         for doc in docs:
             if doc.get("storage_path"):
-                self.file_store.delete(doc["storage_path"])
+                await self.file_store.delete_async(doc["storage_path"])
             self.vector_store.delete_by_doc_id(workspace_id, doc["id"])
             await self.db.delete_document(doc["id"], workspace_id)
         # Delete vector store collection
         self.vector_store.delete_workspace(workspace_id)
-        # Delete file store directory
-        self.file_store.delete_workspace(workspace_id)
+        # Delete file store directory (handles both local and OSS)
+        await self.file_store.delete_workspace_async(workspace_id)
 
     async def delete_document(self, workspace_id: str, doc_id: str):
         docs = await self.db.list_documents(workspace_id)
         doc = next((d for d in docs if d["id"] == doc_id), None)
         if doc:
             if doc.get("storage_path"):
-                self.file_store.delete(doc["storage_path"])
+                await self.file_store.delete_async(doc["storage_path"])
                 # Delete the parsed markdown file generated during processing
                 md_path = Path(doc["storage_path"]).parent / (
                     Path(doc["filename"]).stem + ".md"
                 )
-                self.file_store.delete(str(md_path))
+                await self.file_store.delete_async(str(md_path))
             self.vector_store.delete_by_doc_id(workspace_id, doc_id)
             await self.db.delete_document(doc_id, workspace_id)
 
@@ -187,11 +196,11 @@ class DocManager:
         return mapping.get(ext, "unknown")
 
     def _parse_structured(
-        self, file_type: str, content: bytes, storage_path: str
+        self, file_type: str, content: bytes
     ) -> list[DocumentSection]:
         """Parse document into structured sections based on file type."""
         if file_type == "pdf":
-            return self._pdf_parser.parse(storage_path)
+            return self._pdf_parser.parse(content)
         elif file_type == "docx":
             return self._docx_parser.parse(content)
         elif file_type in ("markdown", "text"):

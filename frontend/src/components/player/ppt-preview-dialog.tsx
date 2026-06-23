@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Save, Check, Loader2, AlertCircle, Pencil } from "lucide-react";
-import { fetchFileContent, saveTaskFile, type Task, type PptStyleInfo } from "@/lib/api";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { fetchFileContent, getFileViewUrl, saveTaskFile, type Task, type PptStyleInfo } from "@/lib/api";
 
 // Script injected into iframe: handles edit mode sync + HTML export for save
 const EDIT_MODE_MONITOR_SCRIPT = `
@@ -82,7 +80,7 @@ export function PPTPreviewDialog({ workspaceId, pptTask, styles, onClose }: PPTP
           throw new Error("PPT 文件路径缺失");
         }
 
-        const fileUrl = `${API_BASE}/api/files/${encodeURIComponent(result.file_path)}?t=${Date.now()}`;
+        const fileUrl = getFileViewUrl(result.file_path);
         const html = await fetchFileContent(fileUrl);
         if (cancelled) return;
 

@@ -17,8 +17,16 @@ MIN_HEADING_FONT_SIZE = 11.0
 class PdfParser:
     """Extract structured sections from PDF files with page numbers."""
 
-    def parse(self, path: str) -> list[DocumentSection]:
-        doc = fitz.open(path)
+    def parse(self, source: str | bytes) -> list[DocumentSection]:
+        """Parse a PDF file.
+
+        Args:
+            source: either a filesystem path (str) or raw PDF bytes.
+        """
+        if isinstance(source, bytes):
+            doc = fitz.open(stream=source, filetype="pdf")
+        else:
+            doc = fitz.open(source)
         try:
             blocks = self._extract_blocks(doc)
             if not blocks:
@@ -28,7 +36,7 @@ class PdfParser:
             raw_sections = self._group_into_sections(blocks, body_size)
             sections = self._assign_hierarchy(raw_sections)
             logger.info(
-                "[PdfParser] extracted %d sections from %s", len(sections), path
+                "[PdfParser] extracted %d sections", len(sections),
             )
             return sections
         finally:

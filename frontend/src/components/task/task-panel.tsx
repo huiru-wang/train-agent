@@ -18,7 +18,7 @@ import {
   Palette,
   Ban,
 } from "lucide-react";
-import { listTasks, deleteTask, type Task, type PptStyleInfo, type VoiceInfo } from "@/lib/api";
+import { listTasks, deleteTask, downloadTaskFile, type Task, type PptStyleInfo, type VoiceInfo } from "@/lib/api";
 
 interface TaskPanelProps {
   workspaceId: string;
@@ -272,17 +272,13 @@ function TaskItem({ task, workspaceId, styles, voices, onDeleted, onNarrate, onP
     if (canPlay) onPlayNarration!(task, parentTask!);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (resultData?.file_path) {
-      const apiBase =
-        process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
-      const downloadUrl = `${apiBase}/api/files/${encodeURIComponent(resultData.file_path)}?t=${Date.now()}`;
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = resultData.filename || "download";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        await downloadTaskFile(task.id, resultData.filename || "download");
+      } catch (err) {
+        console.error("Download failed:", err);
+      }
     }
     setMenuOpen(false);
   };

@@ -119,7 +119,7 @@ export function ConfigPanel({
                 风格提取
               </p>
               <p className="truncate text-[10px] text-muted-foreground">
-                提供 PPTX 文件提取风格
+                提供PPTX文件提取风格，制作专属模版
               </p>
             </div>
           </button>

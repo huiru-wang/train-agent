@@ -45,8 +45,8 @@ const ACTIVE_STATUSES = new Set<DocumentStatus>([
 
 const FILE_TYPE_LABELS: Record<string, string> = {
   pdf: "PDF",
-  docx: "Word",
-  markdown: "Markdown",
+  docx: "Docx",
+  markdown: "MD",
   text: "文本",
 };
 

@@ -53,6 +53,16 @@ if [ ! -d "$FRONTEND/node_modules" ]; then
   cd "$ROOT"
 fi
 
+# --- Start ChromaDB HTTP Server ---
+log "启动 ChromaDB (port 8001)..."
+cd "$BACKEND"
+CHROMA_PATH="${DATA_DIR:-./data}/chroma"
+mkdir -p "$CHROMA_PATH"
+nohup uv run chroma run --path "$CHROMA_PATH" --host 0.0.0.0 --port 8001 \
+  > "$LOGS/chromadb.log" 2>&1 &
+echo $! > "$TMP/chromadb.pid"
+sleep 2  # Wait for ChromaDB to be ready before starting other services
+
 # --- Start Backend API ---
 log "启动后端 API (port 8000)..."
 cd "$BACKEND"
@@ -120,12 +130,14 @@ check_port() {
 
 check_port "后端 API" 8000 "$TMP/backend.pid" "$LOGS/backend.log"
 check_port "LangGraph" 2024 "$TMP/langgraph.pid" "$LOGS/langgraph.log"
+check_port "ChromaDB" 8001 "$TMP/chromadb.pid" "$LOGS/chromadb.log"
 check_port "前端" 3000 "$TMP/frontend.pid" "$LOGS/frontend.log"
 
 echo ""
 log "日志文件:"
 log "  后端:      tail -f $LOGS/backend.log"
 log "  LangGraph: tail -f $LOGS/langgraph.log"
+log "  ChromaDB:  tail -f $LOGS/chromadb.log"
 log "  前端:      tail -f $LOGS/frontend.log"
 echo ""
 log "访问: http://localhost:3000"

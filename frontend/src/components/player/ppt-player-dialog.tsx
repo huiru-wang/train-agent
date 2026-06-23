@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { X, Play, Pause, ChevronLeft, ChevronRight, Loader2, AlertCircle, Volume2, VolumeX, Maximize, Minimize } from "lucide-react";
-import { fetchFileContent, type Task } from "@/lib/api";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+import { fetchFileContent, getFileViewUrl, type Task } from "@/lib/api";
 
 const NAV_SCRIPT = `
 /* Lock down: disable all manual interaction */
@@ -79,7 +77,7 @@ export function PPTPlayerDialog({ workspaceId, narrationTask, pptTask, onClose }
           throw new Error("PPT 文件路径缺失");
         }
 
-        const pptFileUrl = `${API_BASE}/api/files/${encodeURIComponent(pptResult.file_path)}?t=${Date.now()}`;
+        const pptFileUrl = getFileViewUrl(pptResult.file_path);
         const html = await fetchFileContent(pptFileUrl);
         if (cancelled) return;
 
@@ -89,7 +87,7 @@ export function PPTPlayerDialog({ workspaceId, narrationTask, pptTask, onClose }
         const narrSlides: SlideData[] = (narrResult.slides || []).map((s: { number?: number; title?: string; audio_path?: string | null }) => ({
           number: s.number || 0,
           title: s.title || "",
-          audioUrl: s.audio_path ? `${API_BASE}/api/files/${encodeURIComponent(s.audio_path)}` : "",
+          audioUrl: s.audio_path ? getFileViewUrl(s.audio_path) : "",
           hasAudio: !!s.audio_path,
         }));
         setSlides(narrSlides);

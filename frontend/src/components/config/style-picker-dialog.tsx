@@ -52,7 +52,7 @@ export function StylePickerDialog({
   const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
   const getPreviewUrl = (style: PptStyleInfo) =>
-    `${apiBase}/api/ppt-style-preview/${encodeURIComponent(style.preview_path)}`;
+    `${apiBase}/api/ppt-style-preview/${style.preview_path}`;
 
   const handleDelete = async (style: PptStyleInfo) => {
     console.log("[StylePicker] deleting style:", style.id, style.name);

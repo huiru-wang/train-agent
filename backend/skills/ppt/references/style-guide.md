@@ -10,6 +10,20 @@ For mandatory base styles, see [viewport-base.css](../assets/viewport-base.css).
 
 ---
 
+## Image Implementation Rules
+
+- **Content images** (screenshots, logos, inline visuals) must use the `.slide-image` class. They are constrained by `max-height: min(50vh, 400px)` from `viewport-base.css`.
+- **Full-bleed slide backgrounds** must use `.bg-image` with `background-image` on a `<div>`. Never implement them as `<img>`, or the `viewport-base.css` image constraint will truncate them to the top half.
+
+---
+
+## Image Implementation Rules
+
+- **Content images** (screenshots, logos, inline visuals) must use the `.slide-image` class. They are constrained by `max-height: min(50vh, 400px)` from `viewport-base.css`.
+- **Full-bleed slide backgrounds** must use `.bg-image` with `background-image` on a `<div>`. Never implement them as `<img>`, or the `viewport-base.css` image constraint will truncate them to the top half.
+
+---
+
 ## CSS Gotchas
 
 ### Negating CSS Functions

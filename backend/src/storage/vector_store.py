@@ -37,19 +37,29 @@ class DashscopeEmbeddingFunction(EmbeddingFunction):
 
 
 class VectorStore:
-    def __init__(self, persist_dir: str, embedding_fn: EmbeddingFunction = None):
-        self.client = chromadb.PersistentClient(path=persist_dir)
+    """Vector store backed by a ChromaDB HTTP server.
+
+    Both FastAPI and LangGraph processes share the same server via HTTP,
+    eliminating the SQLite file-locking and Rust FFI lifetime issues that
+    plagued the PersistentClient approach.
+    """
+
+    def __init__(self, host: str, port: int, embedding_fn: EmbeddingFunction = None):
+        self._host = host
+        self._port = port
         self._embedding_fn = embedding_fn or DashscopeEmbeddingFunction()
+        self._client = chromadb.HttpClient(host=host, port=port)
+        logger.info("[VectorStore] connected to ChromaDB server at %s:%s", host, port)
 
     def _get_collection(self, workspace_id: str):
-        return self.client.get_or_create_collection(
+        return self._client.get_or_create_collection(
             name=f"ws_{workspace_id}",
             metadata={"hnsw:space": "cosine"},
             embedding_function=self._embedding_fn,
         )
 
     def _get_existing_collection(self, workspace_id: str):
-        return self.client.get_collection(
+        return self._client.get_collection(
             name=f"ws_{workspace_id}",
             embedding_function=self._embedding_fn,
         )
@@ -171,6 +181,6 @@ class VectorStore:
 
     def delete_workspace(self, workspace_id: str):
         try:
-            self.client.delete_collection(f"ws_{workspace_id}")
+            self._client.delete_collection(f"ws_{workspace_id}")
         except Exception:
             pass

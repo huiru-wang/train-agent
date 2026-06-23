@@ -81,7 +81,7 @@ fi
 
 echo ""
 echo "== Ports =="
-for port in 8000 2024 3000; do
+for port in 8000 8001 2024 3000; do
   if lsof -ti:"$port" >/dev/null 2>&1; then
     warn "port $port is in use"
   else

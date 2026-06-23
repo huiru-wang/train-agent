@@ -315,6 +315,40 @@ export function saveStyleFromExtraction(
 
 // --- Files ---
 
+/**
+ * Encode each path segment individually while preserving `/` separators.
+ * Required for `fetch()` which does NOT auto-encode URLs (unlike browser navigation).
+ */
+function encodeFilePath(filePath: string): string {
+  return filePath.split("/").map(encodeURIComponent).join("/");
+}
+
+/** Build a URL for inline file preview (served with Content-Disposition: inline). */
+export function getFileViewUrl(filePath: string, thumb = false): string {
+  const qs = thumb ? `?thumb=1` : "";
+  return `${API_BASE}/api/file-view/${encodeFilePath(filePath)}${qs}`;
+}
+
+/**
+ * Trigger a real browser download for a task's output file.
+ * Backend resolves the file path from the task record — frontend only needs taskId.
+ * Uses fetch + Blob URL to work across origins.
+ */
+export async function downloadTaskFile(taskId: string, filename: string): Promise<void> {
+  const url = `${API_BASE}/api/tasks/${taskId}/download?t=${Date.now()}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(blobUrl);
+}
+
 export async function fetchFileContent(fileUrl: string): Promise<string> {
   const response = await fetch(fileUrl);
   if (!response.ok) throw new Error(`Failed to fetch file: ${response.status}`);

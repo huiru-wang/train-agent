@@ -145,7 +145,7 @@ export function StyleExtractionUploadDialog({
         )}
 
         <p className="mt-4 text-[10px] leading-relaxed text-muted-foreground">
-          上传后系统将自动解析 PPTX 文件并提取视觉风格，生成可复用的风格模板。风格提取不会完整复刻原PPT文件，而是提取关键元素、样式、布局、配色方案，生成风格模板。
+          上传后系统将自动解析 PPTX 文件并通过AI提取视觉风格，生成可复用的风格模板。风格提取不会完整复刻原PPT文件，而是提取关键元素、样式、布局、配色方案等关键信息。
         </p>
       </div>
     </div>

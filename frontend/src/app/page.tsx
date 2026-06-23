@@ -19,6 +19,7 @@ export default function Home() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Workspace | null>(null);
 
   const fetchWorkspaces = useCallback(async () => {
     try {
@@ -49,7 +50,15 @@ export default function Home() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
+    const ws = workspaces.find((w) => w.id === id) ?? null;
+    setDeleteTarget(ws);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    setDeleteTarget(null);
     await deleteWorkspace(id);
     fetchWorkspaces();
   };
@@ -115,6 +124,38 @@ export default function Home() {
         onClose={() => setDialogOpen(false)}
         onCreate={handleCreate}
       />
+
+      {/* Delete workspace confirmation dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="mx-4 w-full max-w-sm rounded-2xl border border-border bg-background p-5 shadow-2xl">
+            <h3 className="text-sm font-semibold text-foreground">
+              删除工作区「{deleteTarget.name}」？
+            </h3>
+            <div className="mt-2 space-y-1.5 text-xs text-muted-foreground">
+              <p>
+                工作区下的知识库和产出文件将被永久删除，
+                <span className="text-red-400">此操作不可撤销</span>。
+              </p>
+              <p className="text-muted-foreground/80">已保存的 PPT 风格模版不受影响。</p>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-lg bg-red-500/20 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/30"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

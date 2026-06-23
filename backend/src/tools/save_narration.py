@@ -40,7 +40,6 @@ async def _tts_pipeline(
     voice: str,
 ):
     """Serial TTS generation pipeline: process slides one by one, updating result_data after each."""
-    output_dir = f"outputs/{parent_task_id}"
 
     try:
         for slide in slides:
@@ -54,9 +53,9 @@ async def _tts_pipeline(
             logger.info("[save_narration] TTS slide %d: text_len=%d, voice=%s", num, len(text), voice)
             audio_bytes = await tts_service.synthesize(text=text, voice=voice)
 
-            filename = f"{task_id}_{num}.wav"
-            file_path = await file_store.save_async(
-                workspace_id, f"{output_dir}/{filename}", audio_bytes
+            filename = f"{task_id}_narration_{num}.wav"
+            file_path = await file_store.save_ppt_file(
+                workspace_id, parent_task_id, filename, audio_bytes
             )
             logger.info("[save_narration] slide %d audio saved: %s (%d bytes)", num, file_path, len(audio_bytes))
 
@@ -175,11 +174,12 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
         )
         logger.info("[save_narration] task created: id=%s", task["id"])
 
-        # Save narration text file under outputs/{parent_task_id}/
+        # Save narration text file under ppt/{parent_task_id}/
         text_filename = f"{task['id']}_narration.md"
-        text_file_path = await file_store.save_async(
+        text_file_path = await file_store.save_ppt_file(
             workspace_id,
-            f"outputs/{parent_task_id}/{text_filename}",
+            parent_task_id,
+            text_filename,
             narration_md.encode("utf-8"),
         )
         logger.info("[save_narration] text saved: %s", text_file_path)

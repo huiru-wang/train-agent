@@ -179,7 +179,7 @@ export function StyleExtractionDialog({
 
   const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
   const previewUrl = previewPath
-    ? `${apiBase}/api/ppt-style-preview/${encodeURIComponent(previewPath)}`
+    ? `${apiBase}/api/ppt-style-preview/${previewPath}`
     : null;
 
   return (
