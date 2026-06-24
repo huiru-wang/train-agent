@@ -53,11 +53,26 @@ if [ ! -d "$FRONTEND/node_modules" ]; then
   cd "$ROOT"
 fi
 
+# --- Sync Backend Python Dependencies ---
+if [ ! -d "$BACKEND/.venv" ]; then
+  log "安装 Python 依赖（uv sync）..."
+  cd "$BACKEND"
+  uv sync
+  cd "$ROOT"
+fi
+
+# --- Ensure .env exists ---
+if [ ! -f "$BACKEND/.env" ]; then
+  log "复制 backend/.env.example → backend/.env（请编辑填入 API Key）"
+  cp "$BACKEND/.env.example" "$BACKEND/.env"
+fi
+
 # --- Start ChromaDB HTTP Server ---
 log "启动 ChromaDB (port 8001)..."
 cd "$BACKEND"
 CHROMA_PATH="${DATA_DIR:-./data}/chroma"
-mkdir -p "$CHROMA_PATH"
+DATA_FILES_PATH="${DATA_DIR:-./data}/files"
+mkdir -p "$CHROMA_PATH" "$DATA_FILES_PATH"
 nohup uv run chroma run --path "$CHROMA_PATH" --host 0.0.0.0 --port 8001 \
   > "$LOGS/chromadb.log" 2>&1 &
 echo $! > "$TMP/chromadb.pid"

@@ -66,7 +66,7 @@ export function PPTPreviewDialog({ workspaceId, pptTask, styles, onClose }: PPTP
   // Derive style name from task result_data
   const resultData = pptTask.result_data ? JSON.parse(pptTask.result_data) : null;
   const styleId = resultData?.ppt_style || "";
-  const styleName = styles.find((s) => s.name_en === styleId)?.name || styleId;
+  const styleName = styles.find((s) => s.id === styleId)?.name || styleId;
   const pptTitle = pptTask.title || "未命名 PPT";
 
   // Load PPT HTML

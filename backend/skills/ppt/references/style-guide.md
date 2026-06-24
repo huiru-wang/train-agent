@@ -53,24 +53,3 @@ CSS does not allow a leading `-` before function names. The browser silently dis
 **Layouts:** Everything centered, generic hero sections, identical card grids
 
 **Decorations:** Realistic illustrations, gratuitous glassmorphism, drop shadows without purpose
-
----
-
-## Font Pairing Quick Reference
-
-All fonts are loaded via `fonts.loli.net` (China-accessible Google Fonts mirror). Never use `fonts.googleapis.com` or `api.fontshare.com` directly.
-
-| Preset | Display Font | Body Font | Source |
-|--------|--------------|-----------|--------|
-| Bold Signal | Archivo Black | Space Grotesk | fonts.loli.net |
-| Electric Studio | Manrope | Manrope | fonts.loli.net |
-| Creative Voltage | Syne | Space Mono | fonts.loli.net |
-| Dark Botanical | Cormorant | IBM Plex Sans | fonts.loli.net |
-| Notebook Tabs | Bodoni Moda | DM Sans | fonts.loli.net |
-| Pastel Geometry | Plus Jakarta Sans | Plus Jakarta Sans | fonts.loli.net |
-| Split Pastel | Outfit | Outfit | fonts.loli.net |
-| Vintage Editorial | Fraunces | Work Sans | fonts.loli.net |
-| Neon Cyber | Exo 2 | Space Grotesk | fonts.loli.net |
-| Terminal Green | JetBrains Mono | JetBrains Mono | fonts.loli.net |
-| Swiss Modern | Archivo | Nunito | fonts.loli.net |
-| Paper & Ink | Cormorant Garamond | Source Serif 4 | fonts.loli.net |

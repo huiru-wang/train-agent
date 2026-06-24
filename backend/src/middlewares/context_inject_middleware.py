@@ -6,7 +6,7 @@ from langchain.agents.middleware import AgentMiddleware, ModelRequest, ModelResp
 from langchain_core.messages import SystemMessage
 from langgraph.runtime import Runtime
 
-from src.managers.prompt_manager import SYSTEM_PROMPT
+from src.managers.prompt_manager import PromptManager
 from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 class ContextInjectMiddleware(AgentMiddleware):
     """Inject dynamic document context and PPT metadata into the system prompt."""
 
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, prompt_manager: PromptManager | None = None) -> None:
         self.db = db
+        self._prompt_manager = prompt_manager or PromptManager()
 
     async def awrap_model_call(
         self,
@@ -85,7 +86,7 @@ class ContextInjectMiddleware(AgentMiddleware):
                 })
 
         # Build dynamic system prompt
-        prompt = SYSTEM_PROMPT
+        prompt = self._prompt_manager.get_system_prompt()
         if doc_summaries:
             summaries_text = "\n".join(f"- {s}" for s in doc_summaries)
             prompt += f"\n\n## 当前知识库文档摘要\n{summaries_text}"
@@ -107,14 +108,23 @@ class ContextInjectMiddleware(AgentMiddleware):
         if ppt_style:
             try:
                 user_id = ws.get("user_id", "") if ws else ""
-                style_record = await self.db.get_ppt_style_by_name_en(ppt_style, user_id=user_id)
+                # Primary: look up by id (new convention)
+                style_record = await self.db.get_ppt_style(ppt_style)
+                # Fallback: old data may store name_en instead of id
+                if not style_record:
+                    style_record = await self.db.get_ppt_style_by_name_en(ppt_style, user_id=user_id)
             except Exception:
                 logger.warning("[ContextInjectMiddleware] failed to look up ppt_style=%s", ppt_style)
 
-            if style_record and style_record.get("style_description"):
+            if style_record:
+                s_name = style_record.get("name", "")
+                s_name_en = style_record.get("name_en", "")
+                s_desc = style_record.get("description", "")
+                s_id = style_record.get("id", ppt_style)
                 pref_lines.append(
-                    f"- PPT视觉风格：{style_record['name']}（{ppt_style}）"
-                    f"（用户已预选，生成PPT时直接使用该风格，跳过风格询问步骤）"
+                    f"- PPT视觉风格：{s_name}（{s_name_en}），ID: {s_id}"
+                    + (f"，{s_desc}" if s_desc else "")
+                    + "（用户已预选，生成PPT时必须调用 get_style_template 工具获取完整风格规范）"
                 )
             else:
                 pref_lines.append(
@@ -142,10 +152,6 @@ class ContextInjectMiddleware(AgentMiddleware):
 
         if pref_lines:
             prompt += f"\n\n## 用户配置偏好\n" + "\n".join(pref_lines)
-
-        # Append style_description after preference section (separate sub-heading)
-        if style_record and style_record.get("style_description"):
-            prompt += f"\n\n### 风格详细描述\n{style_record['style_description']}"
 
         if ppt_tasks_info:
             rows = []

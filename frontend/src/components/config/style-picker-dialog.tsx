@@ -60,7 +60,7 @@ export function StylePickerDialog({
     try {
       await deletePptStyle(style.id);
       console.log("[StylePicker] style deleted successfully");
-      if (style.name_en === selectedId) {
+      if (style.id === selectedId) {
         onSelect("");
       }
       onDelete?.(style);
@@ -133,7 +133,7 @@ export function StylePickerDialog({
                   </h3>
                   <div className="grid grid-cols-3 gap-2.5">
                     {catStyles.map((style) => {
-                      const isSelected = style.name_en === selectedId;
+                      const isSelected = style.id === selectedId;
                       const isCustom = style.category === "custom";
                       return (
                         <div
@@ -145,7 +145,7 @@ export function StylePickerDialog({
                           }`}
                         >
                           <button
-                            onClick={() => onSelect(style.name_en)}
+                            onClick={() => onSelect(style.id)}
                             className="relative block aspect-[16/10] w-full cursor-pointer overflow-hidden bg-muted"
                           >
                             {isCustom ? (

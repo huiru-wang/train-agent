@@ -20,7 +20,7 @@ export default function WorkspacePage() {
   const workspaceId = params.id as string;
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [pptStyle, setPptStyle] = useState("swiss-modern");
+  const [pptStyle, setPptStyle] = useState("sys-swiss-modern");
   const [voiceId, setVoiceId] = useState("Cherry");
   const [currentPptTaskId, setCurrentPptTaskId] = useState("");
   const [externalCommand, setExternalCommand] = useState<ExternalCommand | null>(null);

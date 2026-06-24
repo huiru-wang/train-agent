@@ -45,6 +45,7 @@ These invariants apply to EVERY slide in EVERY presentation:
 - Breakpoints required for heights: 700px, 600px, 500px
 - Include `prefers-reduced-motion` support
 - Never negate CSS functions directly (`-clamp()`, `-min()`, `-max()` are silently ignored) — use `calc(-1 * clamp(...))` instead
+- **Background images from style template**: When the style template provides background image resources, you **MUST** use them on the cover slide and key transition slides. **NEVER** overlay background images with semi-transparent solid color layers (e.g., `rgba(255,255,255,0.9)`) — this destroys the visual identity. For text readability over background images, use local text background blocks (semi-transparent card behind text only, not full-slide overlay) or text shadows. Background images use `.bg-image` class with `background-image` on a `<div>`, never `<img>`.
 
 **When generating, read `viewport-base.css` and include its full contents in every presentation.**
 
@@ -57,7 +58,6 @@ These invariants apply to EVERY slide in EVERY presentation:
 | Feature grid  | 1 heading + 6 cards maximum (2x3 or 3x2)                  |
 | Code slide    | 1 heading + 8-10 lines of code                            |
 | Quote slide   | 1 quote (max 3 lines) + attribution                       |
-| Image slide   | 1 heading + 1 image (max 60vh height)                     |
 
 **Content exceeds limits? Split into multiple slides. Never cram, never scroll.**
 
@@ -65,71 +65,55 @@ These invariants apply to EVERY slide in EVERY presentation:
 
 ## Phase 1: Content Discovery
 
-**Ask ALL questions in a single AskUserQuestion call** so the user fills everything out at once:
+**Before building the form**, analyze the user's original message to extract explicitly provided information (topic, purpose, page count, document scope). Set matched values as `recommended` for the corresponding fields. `recommended` will be auto-preselected by the frontend and shown with a "推荐" badge. **The form always displays all questions** — let the user confirm or adjust.
 
-**Question 1 — Purpose** (header: "Purpose"):
-What is this presentation for? Options: Pitch deck / Teaching-Tutorial / Conference talk / Internal presentation
+**Ask ALL questions in a single `clarify_form` call** so the user fills everything out at once.
 
-**Question 2 — Length** (header: "Length"):
-Approximately how many slides? Options: Short 5-10 / Medium 10-20 / Long 20+
+### Language Rule
+All form `label` and `options` **must match the user's language**. When the user speaks Chinese, use 简体中文; when English, use English. The fixed options below are provided in Chinese as default — translate them only if the user is clearly using another language.
 
-**Question 3 — Source Documents** (header: "Sources"):
-Before asking Phase 1 questions, inspect the knowledge-base document summaries injected in the system prompt.
+### Form Fields
 
-If one or more documents are available, include a multiselect `source_documents` field:
+**Question 1 — Topic（主题确认）** (header: "Topic")
+- Type: `select`, `allow_custom: true`
+- Options: Based on knowledge-base document summaries, recommend 2–3 topic directions as options. If the user's message clearly mentions a topic, include it as an option and put it in `recommended`.
+- If no knowledge-base documents are available and the user hasn't provided a topic, set `options` to an empty list `[]` — the user will use the custom input field.
+- **Never add placeholder options like "自定义主题" to the `options` array** — the custom input field (rendered automatically when `allow_custom=true`) already handles free-text input.
+- If the user provided a topic, set `recommended: ["<user's topic>"]`.
+- If the user did not provide a topic, set `recommended` to the most relevant topic from the document options.
 
-- List every available document by filename or clear title
-- Include "All documents (Recommended)" as the default/recommended option
-- If the user selects "All documents", use every available knowledge-base document
-- If the user selects specific documents, use only those documents as the generation scope
-- If the user selects both "All documents" and specific documents, treat "All documents" as authoritative
+**Question 2 — Purpose（用途）** (header: "Purpose")
+- Type: `select`
+- Options: `产品路演` / `教学培训` / `会议演讲` / `内部汇报`
+- If the user's message clearly states a purpose, set `recommended: ["<matched option>"]`.
+- Otherwise, recommend based on Topic context (e.g., training-related topic → "教学培训").
 
-If no knowledge-base documents are available, do not show `source_documents`. Instead include a required text field:
+**Question 3 — Length（页数）** (header: "Length")
+- Type: `select`
+- Options: `精简 5-10页` / `适中 10-20页` / `详尽 20+页`
+- If the user's message clearly states a page range, set `recommended: ["<matched option>"]`.
+- Otherwise, recommend based on Purpose (e.g., 产品路演 → "精简 5-10页", 教学培训 → "适中 10-20页").
 
-- name: `topic_or_outline`
-- label: "Topic / Outline"
-- description: "No knowledge-base documents are available. Provide the PPT topic, target content, or outline."
+**Question 4 — Source Documents（内容来源）** (header: "Sources")
+- Type: `multiselect`
+- **Only include this field when knowledge-base documents are available.** If no documents, omit this field.
+- Options: List every available document by filename or clear title, plus `全部文档`.
+- If the user's message specifies documents, set `recommended: ["<specified docs>"]`.
+- Otherwise, set `recommended: ["全部文档"]`.
+- If the user selects `全部文档`, use every available knowledge-base document.
+- If the user selects specific documents, use only those as the generation scope.
+- If the user selects both `全部文档` and specific documents, treat `全部文档` as authoritative.
 
-Do not proceed with PPT generation when there are no documents and the user has not provided a concrete topic, outline, or source content.
+**When no documents are available and the user has not provided a topic**, the Topic question's custom input is required. Do not proceed with generation until the user provides a concrete topic, outline, or source content.
 
-**Question 4 — Visual Style** (header: "Style"):
-If the system prompt contains a "用户配置偏好" section with a PPT visual style already selected **and a "风格详细描述" subsection**, **skip this question entirely** and use the pre-selected style directly. Use the detailed style description (colors, typography, layout, signature elements) from the system prompt when generating — do not ask the user to choose a style again.
+### Form Cancellation
 
-If no pre-selected style is available, ask the user to choose. Options:
+If the user cancels the form (the tool returns `cancelled: true`), **immediately stop the entire PPT generation flow**. Do not proceed to Phase 2 or any subsequent step. Politely acknowledge the cancellation and wait for the user's next instruction.
 
-- Swiss Modern (Recommended) — Minimal, precise, ideal for technical training and structured explanations
-- Bold Signal — Dark, high-impact, strong emphasis
-- Electric Studio — Blue/white, professional, polished
-- Creative Voltage — Energetic, creative, product/innovation friendly
-- Dark Botanical — Elegant, premium, atmospheric
-- Notebook Tabs — Editorial paper/tabs, organized course feel
-- Pastel Geometry — Soft, modern, approachable
-- Split Pastel — Playful, friendly, beginner-friendly
-- Vintage Editorial — Opinionated editorial, distinctive personality
-- Neon Cyber — Futuristic, tech-forward, AI/cyber feel
-- Terminal Green — Engineering, code-heavy, terminal-inspired
-- Paper & Ink — Thoughtful paper texture, deep explanation
-
-If the user does not choose a style, default to Swiss Modern.
-
-**Default capability — Inline Editing**:
+### Default capability — Inline Editing
 Do not ask whether inline editing is needed. Generated HTML presentations must support editing text directly in the browser by default, including edit mode, localStorage auto-save, and export/save functionality.
 
 Only disable inline editing when the user explicitly asks for a presentation-only file, a smaller file, or no editing controls.
-
-If user has content, ask them to share it. If the user selected "I will provide a topic or outline instead", ask them to provide it before continuing.
-
-### Step 1.2: Image Evaluation (if images provided)
-
-If user selected "No images" → skip to Phase 2.
-
-If user provides an image folder:
-
-1. **Scan** — List all image files (.png, .jpg, .svg, .webp, etc.)
-2. **View each image** — Use the Read tool (Claude is multimodal)
-3. **Evaluate** — For each: what it shows, USABLE or NOT USABLE (with reason), what concept it represents, dominant colors
-4. **Co-design the outline** — Curated images inform slide structure alongside text. This is NOT "plan slides then add images" — design around both from the start (e.g., 3 screenshots → 3 feature slides, 1 logo → title/closing slide)
-5. Use the image evaluation to inform the text outline in Phase 2.
 
 ---
 
@@ -145,10 +129,6 @@ Use the selected source documents as the retrieval and generation scope:
 - Specific document selections mean retrieve from and cite only those selected documents
 - If no documents are selected, rely on the user's provided topic, outline, or source content
 - Do not imply that unselected documents were used
-
-Do not generate intermediate style previews, do not create `.claude-design/slide-previews/`, and do not ask the user to compare style options after the initial clarification form.
-
-If images were provided, incorporate the selected usable images into the outline. If not, plan CSS-generated visuals (gradients, shapes, patterns) as first-class visual elements.
 
 ### Step 2.1: Draft Outline
 
@@ -237,8 +217,9 @@ Generate the final presentation using the last outline explicitly confirmed by t
 
 The final presentation must follow the confirmed outline. You may split an overloaded slide into multiple slides for viewport fitting, but do not add or remove major sections without asking the user to confirm an updated outline.
 
-**Before generating, read these supporting files:**
+**Before generating, read these supporting files and call the style template tool:**
 
+- **Call `get_style_template` tool** to fetch the complete style specification (style description + resource manifest with background image URLs). This is **MANDATORY** — you must use the returned style template as the authoritative design reference and strictly follow its color scheme, typography, layout rules, and background image usage.
 - [html-template.md](references/html-template.md) — HTML architecture and JS features
 - [style-guide.md](references/style-guide.md) — CSS rules, anti-patterns, font reference
 - [viewport-base.css](assets/viewport-base.css) — Mandatory CSS (include in full)
@@ -324,7 +305,7 @@ Summarize — Tell the user:
 
 | File                                               | Purpose                                                              | When to Read              |
 | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
-| [style-guide.md](references/style-guide.md)                   | CSS rules, anti-patterns, font pairing reference                     | Phase 3 (generation)      |
-| [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3 (generation)      |
-| [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3 (generation)      |
-| [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3 (generation)      |
+| [style-guide.md](references/style-guide.md)                   | CSS rules, anti-patterns, font pairing reference                     | Phase 3      |
+| [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3      |
+| [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3      |
+| [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3      |

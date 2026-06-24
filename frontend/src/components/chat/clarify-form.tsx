@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { Check, ChevronDown, Send, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Send, Sparkles, X } from "lucide-react";
 
 interface FormField {
   name: string;
   label: string;
-  type: "text" | "select" | "multiselect";
+  type: "select" | "multiselect";
   options?: string[];
+  recommended?: string[];
+  allow_custom?: boolean;
   required?: boolean;
 }
 
@@ -24,7 +26,22 @@ export function ClarifyForm({
   fields,
   onSubmit,
 }: ClarifyFormProps) {
-  const [values, setValues] = useState<Record<string, string | string[]>>({});
+  // Auto-preselect from recommended values
+  const initialValues = useMemo(() => {
+    const init: Record<string, string | string[]> = {};
+    for (const f of fields) {
+      if (f.recommended && f.recommended.length > 0) {
+        if (f.type === "select") {
+          init[f.name] = f.recommended[0];
+        } else if (f.type === "multiselect") {
+          init[f.name] = [...f.recommended];
+        }
+      }
+    }
+    return init;
+  }, [fields]);
+
+  const [values, setValues] = useState<Record<string, string | string[]>>(initialValues);
   const [submitted, setSubmitted] = useState(false);
   const [cancelled, setCancelled] = useState(false);
 
@@ -116,7 +133,8 @@ function FormFieldComponent({
   value,
   onChange,
 }: FormFieldComponentProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [customInput, setCustomInput] = useState("");
+
   const labelElement = (
     <label className="mb-1 block text-xs font-medium text-foreground/80">
       {field.label}
@@ -126,67 +144,55 @@ function FormFieldComponent({
     </label>
   );
 
-  if (field.type === "text") {
-    return (
-      <div>
-        {labelElement}
-        <input
-          value={(value as string) ?? ""}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-lg border border-border bg-muted px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-          placeholder={`请输入${field.label}`}
-        />
-      </div>
-    );
-  }
+  // Use original options order; recommended only affects selection and badge
+  const recommended = field.recommended ?? [];
+  const options = field.options ?? [];
 
   if (field.type === "select") {
     const selectedValue = (value as string) ?? "";
-    const options = field.options ?? [];
+    // Check if current value is a custom input (not in the options list)
+    const optsSet = new Set(field.options ?? []);
+    const isCustomSelected = selectedValue && !optsSet.has(selectedValue);
 
     return (
       <div>
         {labelElement}
-        <button
-          type="button"
-          onClick={() => setIsOpen((open) => !open)}
-          disabled={options.length === 0}
-          className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-left text-xs text-foreground transition-colors hover:border-accent/50 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <span className={selectedValue ? "" : "text-muted-foreground"}>
-            {selectedValue || "请选择"}
-          </span>
-          <ChevronDown
-            size={14}
-            className={`shrink-0 text-muted-foreground transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
+        <div className="flex flex-wrap gap-1.5">
+          {options.map((option) => {
+            const isSelected = selectedValue === option;
+            const isRecommended = recommended.includes(option);
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => {
+                  setCustomInput("");
+                  onChange(option);
+                }}
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                  isSelected
+                    ? "border-accent bg-accent/20 text-accent"
+                    : "border-border bg-muted text-muted-foreground hover:border-accent/40"
+                }`}
+              >
+                {option}
+                {isRecommended && (
+                  <Sparkles size={9} className="text-accent/70" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {field.allow_custom && (
+          <input
+            value={isCustomSelected ? selectedValue : customInput}
+            onChange={(e) => {
+              setCustomInput(e.target.value);
+              onChange(e.target.value.trim());
+            }}
+            className="mt-1.5 w-full rounded-lg border border-border bg-muted px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            placeholder="或输入自定义内容..."
           />
-        </button>
-        {isOpen && (
-          <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-border bg-muted p-1">
-            {options.map((option) => {
-              const isSelected = selectedValue === option;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    onChange(option);
-                    setIsOpen(false);
-                  }}
-                  className={`flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors ${
-                    isSelected
-                      ? "bg-accent/20 text-accent"
-                      : "text-foreground hover:bg-background/60"
-                  }`}
-                >
-                  <span>{option}</span>
-                  {isSelected && <Check size={12} className="shrink-0" />}
-                </button>
-              );
-            })}
-          </div>
         )}
       </div>
     );
@@ -198,25 +204,29 @@ function FormFieldComponent({
       <div>
         {labelElement}
         <div className="flex flex-wrap gap-1.5">
-          {field.options?.map((option) => {
+          {options.map((option) => {
             const isSelected = selectedValues.includes(option);
+            const isRecommended = recommended.includes(option);
             return (
               <button
                 key={option}
                 type="button"
                 onClick={() => {
                   const newValues = isSelected
-                    ? selectedValues.filter((selectedValue) => selectedValue !== option)
+                    ? selectedValues.filter((v) => v !== option)
                     : [...selectedValues, option];
                   onChange(newValues);
                 }}
-                className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs transition-colors ${
                   isSelected
                     ? "border-accent bg-accent/20 text-accent"
                     : "border-border bg-muted text-muted-foreground hover:border-accent/40"
                 }`}
               >
                 {option}
+                {isRecommended && (
+                  <Sparkles size={9} className="text-accent/70" />
+                )}
               </button>
             );
           })}

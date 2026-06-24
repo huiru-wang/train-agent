@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -11,6 +12,14 @@ from src.storage.file_store import FileStore
 from src.storage.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+class DuplicateDocumentError(ValueError):
+    """Raised when a duplicate document is detected during upload."""
+
+    def __init__(self, message: str, existing_doc_id: str = ""):
+        super().__init__(message)
+        self.existing_doc_id = existing_doc_id
 
 
 class DocManager:
@@ -42,6 +51,7 @@ class DocManager:
         self, workspace_id: str, filename: str, content: bytes
     ) -> dict:
         file_type = self._detect_type(filename)
+        content_hash = hashlib.sha256(content).hexdigest()
         logger.info(
             "[DocManager] create_document_upload: filename=%s, type=%s, size=%d bytes, workspace=%s",
             filename,
@@ -49,6 +59,23 @@ class DocManager:
             len(content),
             workspace_id,
         )
+
+        # --- Duplicate detection: filename or content hash ---
+        duplicate = await self.db.find_duplicate_document(
+            workspace_id, filename, content_hash
+        )
+        if duplicate:
+            if duplicate["filename"] == filename:
+                raise DuplicateDocumentError(
+                    f"文档 '{filename}' 已存在，请勿重复上传。如需更新请先删除旧文档。",
+                    existing_doc_id=duplicate["id"],
+                )
+            else:
+                raise DuplicateDocumentError(
+                    f"与已有文档 '{duplicate['filename']}' 内容完全相同，无需重复上传。",
+                    existing_doc_id=duplicate["id"],
+                )
+
         storage_path = await self.file_store.save_doc(workspace_id, filename, content)
         logger.info("[DocManager] file saved to: %s", storage_path)
         doc = await self.db.create_document(
@@ -56,6 +83,7 @@ class DocManager:
             filename=filename,
             file_type=file_type,
             storage_path=storage_path,
+            content_hash=content_hash,
         )
         logger.info("[DocManager] document record created: id=%s", doc["id"])
         return doc

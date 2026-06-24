@@ -1,3 +1,4 @@
+import random
 import uuid
 from datetime import datetime
 import json
@@ -78,6 +79,7 @@ class Database:
                 name_en TEXT DEFAULT '',
                 description TEXT DEFAULT '',
                 style_description TEXT DEFAULT '',
+                resource_manifest TEXT DEFAULT '[]',
                 preview_path TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now', 'localtime'))
             );
@@ -97,6 +99,13 @@ class Database:
         if "updated_at" not in columns:
             await self.connection.execute(
                 "ALTER TABLE document ADD COLUMN updated_at TEXT DEFAULT (datetime('now', 'localtime'))"
+            )
+        if "content_hash" not in columns:
+            await self.connection.execute(
+                "ALTER TABLE document ADD COLUMN content_hash TEXT"
+            )
+            await self.connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_document_hash ON document(workspace_id, content_hash)"
             )
 
         # workspace: add ext_data column with default config
@@ -168,6 +177,14 @@ class Database:
                 if column not in message_columns:
                     await self.connection.execute(ddl)
 
+        # ppt_style: add resource_manifest column
+        cursor = await self.connection.execute("PRAGMA table_info(ppt_style)")
+        ppt_style_columns = {row["name"] for row in await cursor.fetchall()}
+        if "resource_manifest" not in ppt_style_columns:
+            await self.connection.execute(
+                "ALTER TABLE ppt_style ADD COLUMN resource_manifest TEXT DEFAULT '[]'"
+            )
+
         # Seed builtin PPT styles
         for style in _BUILTIN_PPT_STYLES:
             await self.connection.execute(
@@ -204,8 +221,21 @@ class Database:
 
         workspace_id = str(uuid.uuid4())
         default_voice_info = get_default_voice_info("Cherry")
+
+        # Randomly pick a system style as default ppt_style
+        default_style_id = "swiss-modern"  # fallback
+        try:
+            cursor = await self.connection.execute(
+                "SELECT id FROM ppt_style WHERE user_id = 'system'"
+            )
+            system_styles = await cursor.fetchall()
+            if system_styles:
+                default_style_id = random.choice(system_styles)["id"]
+        except Exception:
+            pass  # table may not exist yet during migration
+
         default_ext_data = json.dumps(
-            {"ppt_style": "swiss-modern", "voice_info": default_voice_info},
+            {"ppt_style": default_style_id, "voice_info": default_voice_info},
             ensure_ascii=False,
         )
         await self.connection.execute(
@@ -480,13 +510,14 @@ class Database:
         filename: str,
         file_type: str,
         storage_path: str,
+        content_hash: str = "",
     ) -> dict:
         doc_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
         await self.connection.execute(
-            "INSERT INTO document (id, workspace_id, filename, file_type, storage_path, status, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (doc_id, workspace_id, filename, file_type, storage_path, "uploaded", now, now),
+            "INSERT INTO document (id, workspace_id, filename, file_type, storage_path, content_hash, status, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (doc_id, workspace_id, filename, file_type, storage_path, content_hash, "uploaded", now, now),
         )
         await self.connection.commit()
         return {
@@ -495,12 +526,31 @@ class Database:
             "filename": filename,
             "file_type": file_type,
             "storage_path": storage_path,
+            "content_hash": content_hash,
             "summary": None,
             "status": "uploaded",
             "error_message": None,
             "created_at": now,
             "updated_at": now,
         }
+
+    async def find_duplicate_document(
+        self, workspace_id: str, filename: str, content_hash: str
+    ) -> dict | None:
+        """Find an existing non-error document with the same filename or content_hash.
+
+        Returns the conflicting document dict, or None if no duplicate found.
+        """
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT * FROM document "
+            "WHERE workspace_id = ? AND status != 'error' "
+            "AND (filename = ? OR content_hash = ?) "
+            "ORDER BY created_at DESC LIMIT 1",
+            (workspace_id, filename, content_hash),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
     async def list_documents(self, workspace_id: str) -> list[dict]:
         cursor = await self.connection.execute(
@@ -736,6 +786,19 @@ class Database:
         await self.connection.execute(
             "UPDATE ppt_style SET preview_path = ? WHERE id = ?",
             (preview_path, style_id),
+        )
+        await self.connection.commit()
+
+    async def update_ppt_style(self, style_id: str, **fields):
+        """Update arbitrary fields of a ppt_style record."""
+        if not fields:
+            return
+        await self.ensure_initialized()
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [style_id]
+        await self.connection.execute(
+            f"UPDATE ppt_style SET {set_clause} WHERE id = ?",
+            values,
         )
         await self.connection.commit()
 

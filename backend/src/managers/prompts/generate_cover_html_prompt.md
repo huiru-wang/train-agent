@@ -1,4 +1,169 @@
-# System Prompt：根据风格模版生成示例首页 HTML
+# 生成封面预览 HTML
+
+根据提供的风格模版，生成一个**独立的封面预览 HTML 文件**（仅一页）。
+
+## 输出要求
+
+- 输出纯 HTML，不要用 ```html ... ``` 代码块包裹
+- 自包含文件，CSS/JS 全部内联，不依赖外部文件（字体 CDN 除外）
+- 使用占位符文本（封面主标题、封面副标题、封面说明文字、作者/机构信息），禁止还原原始 PPT 业务文本
+
+---
+
+## HTML 骨架
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>[风格名称] - 示例首页</title>
+  <link rel="preconnect" href="https://fonts.loli.net">
+  <link rel="stylesheet" href="https://fonts.loli.net/css2?family=...">
+  <style>
+    :root { /* CSS 变量：颜色、字体、字号，从风格模版提取 */ }
+    /* === VIEWPORT BASE CSS === */
+    /* 完整粘贴下方 VIEWPORT BASE CSS */
+    /* 封面页自定义样式 */
+  </style>
+</head>
+<body>
+  <section class="slide title-slide">
+    <div class="bg-image"></div>
+    <div class="slide-content">
+      <h1 class="reveal cover-title">封面主标题</h1>
+      <h2 class="reveal cover-subtitle">封面副标题</h2>
+      <p class="reveal cover-description">封面说明文字</p>
+      <div class="reveal cover-bottom-bar"><span>作者/机构信息</span></div>
+    </div>
+  </section>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const slide = document.querySelector('.slide');
+      if (slide) slide.classList.add('visible');
+    });
+  </script>
+</body>
+</html>
+```
+
+---
+
+## VIEWPORT BASE CSS（必须完整包含）
+
+```css
+html, body { height: 100%; overflow-x: hidden; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+.slide {
+  width: 100vw; height: 100vh; height: 100dvh;
+  overflow: hidden; scroll-snap-align: start;
+  display: flex; flex-direction: column; position: relative;
+}
+.slide-content {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  max-height: 100%; overflow: hidden; padding: var(--slide-padding);
+}
+:root {
+  --title-size: clamp(1.5rem, 5vw, 4rem);
+  --h2-size: clamp(1.25rem, 3.5vw, 2.5rem);
+  --h3-size: clamp(1rem, 2.5vw, 1.75rem);
+  --body-size: clamp(0.75rem, 1.5vw, 1.125rem);
+  --small-size: clamp(0.65rem, 1vw, 0.875rem);
+  --slide-padding: clamp(1rem, 4vw, 4rem);
+  --content-gap: clamp(0.5rem, 2vw, 2rem);
+  --element-gap: clamp(0.25rem, 1vw, 1rem);
+}
+.card, .container, .content-box { max-width: min(90vw, 1000px); max-height: min(80vh, 700px); }
+.feature-list, .bullet-list { gap: clamp(0.4rem, 1vh, 1rem); }
+.feature-list li, .bullet-list li { font-size: var(--body-size); line-height: 1.4; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: clamp(0.5rem, 1.5vw, 1rem); }
+img, .image-container { max-width: 100%; max-height: min(50vh, 400px); object-fit: contain; }
+@media (max-height: 700px) { :root { --slide-padding: clamp(0.75rem, 3vw, 2rem); --content-gap: clamp(0.4rem, 1.5vw, 1rem); --title-size: clamp(1.25rem, 4.5vw, 2.5rem); --h2-size: clamp(1rem, 3vw, 1.75rem); } }
+@media (max-height: 600px) { :root { --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem); --content-gap: clamp(0.3rem, 1vw, 0.75rem); --title-size: clamp(1.1rem, 4vw, 2rem); --body-size: clamp(0.7rem, 1.2vw, 0.95rem); } .nav-dots, .decorative { display: none; } }
+@media (max-height: 500px) { :root { --slide-padding: clamp(0.4rem, 2vw, 1rem); --title-size: clamp(1rem, 3.5vw, 1.5rem); --h2-size: clamp(0.9rem, 2.5vw, 1.25rem); --body-size: clamp(0.65rem, 1vw, 0.85rem); } }
+@media (max-width: 600px) { :root { --title-size: clamp(1.25rem, 7vw, 2.5rem); } .grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; } html { scroll-behavior: auto; } }
+```
+
+---
+
+## 关键规则
+
+### 标准类名
+
+| 类名 | 说明 |
+|------|------|
+| `.slide` | 幻灯片容器（`height: 100vh; overflow: hidden`） |
+| `.slide-content` | 内容容器（根据封面布局覆盖 `justify-content`） |
+| `.bg-image` | 全屏背景层 |
+| `.reveal` | 入场动画元素 |
+
+### 背景图片
+
+封面页**必须**使用资源清单中的背景图片 URL（如有）。实现方式：
+
+```css
+.bg-image {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  background-image: url('从资源清单获取的URL');
+  background-size: cover; background-position: center;
+  z-index: 0;
+}
+```
+
+- 使用 `<div class="bg-image">` + CSS `background-image`，**禁止**用 `<img>` 标签（会被 VIEWPORT BASE CSS 截断）
+- 资源清单中的 URL 直接使用，不做路径转换
+- **禁止**在背景图上叠加大面积半透明遮罩（如 `rgba(255,255,255,0.7)`）。如需保证文字可读性，仅在文字后方使用局部半透明色块
+- 仅当资源清单为空或明确说明"无背景"时，才用 CSS 渐变替代
+
+### 对齐方式
+
+根据风格模版的封面布局覆盖 `.slide-content` 的 `justify-content`：
+
+```css
+/* 标题偏上 */
+.title-slide .slide-content { justify-content: flex-start; padding-top: 15vh; }
+/* 居中大标题 */
+.title-slide .slide-content { justify-content: center; align-items: center; text-align: center; }
+```
+
+### 字体
+
+- 西文通过 `https://fonts.loli.net` 加载（国内可访问的 Google Fonts 镜像）
+- 中文使用系统字体回退：`"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif`
+- 字号必须使用 `clamp()`，引用 VIEWPORT BASE CSS 中的变量
+
+### 动画
+
+```css
+.reveal { opacity: 0; transform: translateY(30px); transition: opacity 0.6s ease-out, transform 0.6s ease-out; }
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+```
+
+### CSS Gotchas
+
+CSS 不支持直接在函数前加负号：
+
+```css
+/* WRONG — 浏览器静默忽略 */
+right: -clamp(28px, 3.5vw, 44px);
+
+/* CORRECT — 用 calc() 取反 */
+right: calc(-1 * clamp(28px, 3.5vw, 44px));
+```
+
+### 禁止事项
+
+- 禁止生成多页幻灯片
+- 禁止引入资源清单外的图片或图标
+- 禁止使用 emoji
+- 禁止让内容超出 100vh 导致内部滚动
+- 禁止编造颜色、字体、位置
+- 禁止用 `<img>` 做全屏背景
+- 禁止输出 ```html ... ``` 代码块包裹整个输出
+# 根据风格模版生成示例首页 HTML
 
 ## 角色
 

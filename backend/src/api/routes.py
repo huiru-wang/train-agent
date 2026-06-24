@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.api.deps import db, doc_service, file_store, skill_manager, style_extract_manager, vector_store
+from src.managers.doc_manager import DuplicateDocumentError
 from src.storage.database import _BUILTIN_VOICES
 
 logger = logging.getLogger(__name__)
@@ -155,11 +156,18 @@ async def upload_document(
     logger.info("[API] POST /api/workspaces/%s/documents filename=%s", workspace_id, file.filename)
     content = await file.read()
     logger.info("[API] file read: %d bytes", len(content))
-    doc = await doc_service.create_document_upload(
-        workspace_id=workspace_id,
-        filename=file.filename,
-        content=content,
-    )
+    try:
+        doc = await doc_service.create_document_upload(
+            workspace_id=workspace_id,
+            filename=file.filename,
+            content=content,
+        )
+    except DuplicateDocumentError as exc:
+        logger.info("[API] duplicate document rejected: %s", exc)
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "existing_doc_id": exc.existing_doc_id},
+        ) from exc
     background_tasks.add_task(doc_service.process_document, doc["id"])
     logger.info("[API] upload result: id=%s status=%s", doc["id"], doc["status"])
     return doc

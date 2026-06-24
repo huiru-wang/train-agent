@@ -1,271 +1,227 @@
 # Train Agent
 
-Train Agent is a training-domain agent product. The current MVP focuses on workspace-based knowledge QA, training PPT generation, and narration (script + TTS audio) generation.
+Train Agent 是一个 AI 培训助手，帮助用户基于上传的培训文档进行知识问答、PPT 生成、口播稿生成、TTS 音频合成和 PPT 风格提取。
 
-## What It Runs
+## 架构概览
 
-The local development stack has three services:
+本地开发栈由 4 个服务组成：
 
-| Service | Port | Purpose |
-| --- | ---: | --- |
-| FastAPI backend | 8000 | REST APIs for workspaces, documents, tasks, messages, and file downloads |
-| LangGraph server | 2024 | Streaming agent runtime used by the chat panel |
-| Next.js frontend | 3000 | Workspace UI with document, chat, task, config, and player panels |
+| 服务 | 端口 | 说明 |
+|------|-----:|------|
+| FastAPI Backend | 8000 | REST API，管理工作区/文档/任务/消息/PPT风格 |
+| LangGraph Server | 2024 | Agent 流式运行时，对话+工具调用 |
+| ChromaDB | 8001 | 向量数据库，文档 Embedding 存储与检索 |
+| Next.js Frontend | 3000 | 工作台 UI（文档、聊天、任务、配置、播放面板） |
 
-## Core Flow
+后端采用**双进程架构**：FastAPI 负责 CRUD，LangGraph 负责 Agent 推理，两者共享 SQLite + ChromaDB + 文件存储，但各自维护独立的依赖实例。
 
-1. Create a workspace from the homepage.
-2. Upload training documents in the workspace document panel.
-3. The backend stores the source file, parses it, chunks it, writes vectors to ChromaDB, and saves a summary to SQLite.
-4. The chat panel sends messages to LangGraph with the current `workspace_id`.
-5. The agent injects document summaries into its prompt and calls tools such as `rag_search`, `load_skill`, `save_ppt`, and `save_narration`.
-6. PPT generation is driven by `backend/skills/ppt/SKILL.md` and saves output files into the task panel.
-7. Narration generation is driven by `backend/skills/narration/SKILL.md`, producing per-slide scripts and optional TTS audio files.
-8. Message history is persisted to SQLite and supports turn-based pagination for long conversations.
-9. Workspace config (PPT style, TTS voice) is stored in `ext_data` and passed to the agent before each run.
+## 快速开始
 
-## Repository Map
+### 前置条件
 
-| Path | Purpose |
-| --- | --- |
-| `backend/src/api/routes.py` | FastAPI REST routes |
-| `backend/src/api/deps.py` | Dependency injection for FastAPI process |
-| `backend/src/app_context.py` | Shared AppContext bundling storage instances |
-| `backend/src/agent/graph.py` | LangGraph/LangChain agent entrypoint |
-| `backend/src/agent/message_history.py` | Message history callback + middleware |
-| `backend/src/middlewares/` | Agent middlewares (doc context, summarization, sanitizer, logging) |
-| `backend/src/tools/` | Agent tools (rag_search, load_skill, save_ppt, save_narration, etc.) |
-| `backend/src/services/doc_service.py` | Document upload, parsing, chunking, summary, vector indexing |
-| `backend/src/services/tts_service.py` | TTS audio generation via Dashscope |
-| `backend/src/storage/` | SQLite, ChromaDB, and file storage wrappers |
-| `backend/skills/ppt/` | PPT generation skill (SKILL.md + references + assets) |
-| `backend/skills/narration/` | Narration script + TTS generation skill |
-| `backend/tests/` | Backend unit tests |
-| `frontend/src/app/` | Next.js app routes |
-| `frontend/src/components/chat/` | Chat system (assistant, thread, clarify-form) |
-| `frontend/src/components/config/` | Config panel (PPT style picker, voice picker) |
-| `frontend/src/components/player/` | PPT preview and playback dialogs |
-| `frontend/src/components/document/` | Document upload and list panel |
-| `frontend/src/components/task/` | Task/output panel with parent-child hierarchy |
-| `frontend/src/lib/api.ts` | Frontend REST client |
-| `scripts/` | Local dev lifecycle scripts |
+在开始之前，确保系统已安装：
 
-## Environment
+| 工具 | 最低版本 | 说明 |
+|------|---------|------|
+| Python | >= 3.12 | 后端运行时 |
+| Node.js | >= 22 | 前端运行时（pnpm 10+ 要求） |
 
-Copy the example and fill in secrets:
+> Python 和 Node.js 的安装由用户自行处理（推荐 pyenv / nvm）。
+
+### 一键初始化
 
 ```bash
-cp .env.example .env
-cp backend/.env.example backend/.env
+./scripts/init.sh
 ```
 
-Important variables:
+该脚本会自动完成以下操作：
 
-| Variable | Used By | Default |
-| --- | --- | --- |
-| `DEEPSEEK_API_KEY` | backend | required for Agent LLM calls |
-| `DEEPSEEK_API_BASE` | backend | `https://api.deepseek.com` |
-| `MAIN_MODEL` | backend | `deepseek-v4-flash` (Agent graph model) |
-| `SUMMARIZATION_API_KEY` | backend | for document summarization |
-| `SUMMARIZATION_MODEL` | backend | `deepseek-v4-flash` |
-| `EMBEDDING_API_KEY` | backend | for vector embedding |
-| `EMBEDDING_API_BASE` | backend | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `EMBEDDING_MODEL` | backend | `text-embedding-v2` |
-| `TTS_API_KEY` | backend | for TTS audio generation |
-| `TTS_MODEL` | backend | `qwen3-tts-flash` |
-| `DATA_DIR` | backend | `./data` relative to `backend/` |
-| `NEXT_PUBLIC_API_BASE` | frontend | `http://localhost:8000` |
-| `NEXT_PUBLIC_LANGGRAPH_API_URL` | frontend | `http://localhost:2024` |
+1. 检查并安装系统工具：`uv`、`pnpm`（或 npm）、`perl`、`lsof`
+2. 创建 `backend/.env`（从模板复制）
+3. 创建数据目录 `backend/data/{chroma,files}`
+4. 安装 Python 依赖（`uv sync`）
+5. 安装前端依赖（`pnpm install`）
 
-## Common Commands
+### 配置环境变量
 
-Install frontend dependencies once:
+编辑 `backend/.env`，填入必要的 API Key：
 
-```bash
-cd frontend
-pnpm install
-```
+| 变量 | 用途 | 是否必须 |
+|------|------|---------|
+| `DEEPSEEK_API_KEY` | Agent LLM 推理 + 文档摘要 | **必须** |
+| `DEEPSEEK_API_BASE` | DeepSeek API 地址 | 默认 `https://api.deepseek.com` |
+| `MAIN_MODEL` | Agent 主模型 | 默认 `deepseek-v4-flash` |
+| `EMBEDDING_API_KEY` | 向量 Embedding（Dashscope） | **必须** |
+| `EMBEDDING_API_BASE` | Embedding API 地址 | 默认 Dashscope |
+| `EMBEDDING_MODEL` | Embedding 模型 | 默认 `text-embedding-v2` |
+| `TTS_API_KEY` | TTS 语音合成（Dashscope） | 可选 |
+| `TTS_MODEL` | TTS 模型 | 默认 `qwen3-tts-flash` |
+| `VISION_API_KEY` | 视觉模型（PPT 风格提取） | 可选 |
+| `VISION_MODEL` | 视觉模型 | 默认 `qwen3.5-flash` |
+| `LANGSMITH_API_KEY` | 链路追踪 | 可选 |
+| `OSS_ACCESS_KEY_ID/SECRET` | 阿里云 OSS 存储 | 可选（默认本地存储） |
 
-If `pnpm` is not installed, use `npm install`.
-
-Run a local health check:
-
-```bash
-./scripts/doctor.sh
-```
-
-Start all services:
+### 启动服务
 
 ```bash
 ./scripts/start.sh
 ```
 
-Stop all services:
+启动后访问 **http://localhost:3000** 即可使用。
+
+### 验证
 
 ```bash
-./scripts/stop.sh
+./scripts/doctor.sh   # 健康检查，确认所有依赖和端口就绪
 ```
 
-Restart all services:
+## 依赖清单
+
+### 系统工具
+
+| 工具 | 用途 | 安装方式 |
+|------|------|---------|
+| Python >= 3.12 | 后端运行时 | pyenv / brew / apt |
+| Node.js >= 22 | 前端运行时 | nvm / brew |
+| uv | Python 包管理器 | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| pnpm（或 npm） | 前端包管理器 | `npm install -g pnpm` |
+| perl | 日志时间戳转换 | macOS 自带 / `apt install perl` |
+| lsof | 端口检测 | macOS 自带 / `apt install lsof` |
+
+### Python 依赖（后端）
+
+通过 `uv sync` 安装，定义在 `backend/pyproject.toml`：
+
+**核心框架**
+- `langchain >= 1.2.3` — Agent 框架
+- `langgraph >= 1.1.9` — Agent 图运行时
+- `langgraph-api >= 0.10.0` / `langgraph-cli >= 0.4.27` — LangGraph 开发服务器
+- `langchain-openai >= 0.3` — OpenAI 兼容 LLM 集成
+- `langchain-community >= 0.3` — 社区组件
+- `langchain-text-splitters >= 0.3` — 文本分块
+- `langchain-deepseek >= 1.1.0` — DeepSeek 模型适配
+
+**Web 框架**
+- `fastapi >= 0.115` / `uvicorn >= 0.34` — REST API 服务器
+
+**存储**
+- `chromadb >= 1.0` — 向量数据库
+- `aiosqlite >= 0.21` — 异步 SQLite
+
+**文档处理**
+- `python-docx >= 1.1` — Word 文档解析
+- `pymupdf >= 1.25` — PDF 解析
+- `python-pptx >= 1.0` — PPTX 解析
+- `Pillow >= 10.0` — 图片处理
+
+**AI 服务**
+- `dashscope >= 1.20` — 阿里云 Dashscope SDK（Embedding + TTS + Vision）
+
+**工具库**
+- `httpx >= 0.28` — HTTP 客户端
+- `python-dotenv >= 1.1` — 环境变量加载
+- `pyyaml >= 6.0` — YAML 解析
+- `python-multipart >= 0.0.20` — 文件上传
+
+**可选依赖**
+- `oss2 >= 2.18` — 阿里云 OSS 存储（`uv sync --extra oss`）
+- `pytest >= 8` / `pytest-asyncio >= 0.25` / `ruff >= 0.11` — 开发工具（`uv sync --extra dev`）
+
+### Node 依赖（前端）
+
+通过 `pnpm install` 安装，定义在 `frontend/package.json`：
+
+**框架**
+- `next 16` — React 全栈框架（App Router）
+- `react 19` / `react-dom 19` — UI 库
+
+**AI 通信**
+- `@langchain/core ^1.1` — LangChain 核心类型
+- `@langchain/langgraph-sdk ^1.9` — LangGraph 客户端 SDK
+- `@langchain/react ^1.0` — React 流式 Hook
+
+**UI 组件**
+- `@assistant-ui/react ^0.14` / `@assistant-ui/react-langchain` / `@assistant-ui/react-markdown` — 聊天 UI
+- `react-markdown ^10.1` / `remark-gfm ^4.0` — Markdown 渲染
+- `react-syntax-highlighter ^16.1` — 代码高亮
+- `lucide-react ^1.16` — 图标库
+- `zustand ^5.0` — 轻量状态管理
+
+**开发工具**
+- `tailwindcss ^4` / `@tailwindcss/postcss` — CSS 框架
+- `typescript ^5` — 类型系统
+- `eslint ^9` / `eslint-config-next` — 代码检查
+
+### 外部 API 服务
+
+| 服务 | 用途 | 申请地址 |
+|------|------|---------|
+| DeepSeek API | Agent LLM + 文档摘要 | https://platform.deepseek.com |
+| Dashscope | Embedding + TTS + Vision | https://dashscope.console.aliyun.com |
+| LangSmith（可选） | 链路追踪 | https://smith.langchain.com |
+
+## 日常开发命令
 
 ```bash
-./scripts/restart.sh
-```
-
-Backend-only tests:
-
-```bash
-cd backend
-uv run pytest tests/
-```
-
-Frontend checks:
-
-```bash
-cd frontend
-pnpm lint
-pnpm build
-```
-
-If `pnpm` is not installed, the scripts fall back to `npm`.
-
-## Development Notes
-
-- Keep runtime data under `backend/data/` or another `DATA_DIR`; do not commit generated data, logs, or local env files.
-- Add new agent tools under `backend/src/tools/` and register them in `backend/src/tools/__init__.py` via `create_tools()`.
-- Add new middlewares under `backend/src/middlewares/` and register them in `middlewares/__init__.py` via `create_middlewares()`.
-- Add new skills as `backend/skills/<skill-name>/SKILL.md`.
-- Add backend tests for storage, services, tools, and skill behavior when changing those areas.
-- After frontend UI changes, run lint/build and visually verify the affected local page.
-# Train Agent
-
-Train Agent is a training-domain agent product. The current MVP focuses on workspace-based knowledge QA and training PPT generation.
-
-## What It Runs
-
-The local development stack has three services:
-
-| Service | Port | Purpose |
-| --- | ---: | --- |
-| FastAPI backend | 8000 | REST APIs for workspaces, documents, tasks, and file downloads |
-| LangGraph server | 2024 | Streaming agent runtime used by the chat panel |
-| Next.js frontend | 3000 | Workspace UI with document, chat, and task panels |
-
-## Core Flow
-
-1. Create a workspace from the homepage.
-2. Upload training documents in the workspace document panel.
-3. The backend stores the source file, parses it, chunks it, writes vectors to ChromaDB, and saves a summary to SQLite.
-4. The chat panel sends messages to LangGraph with the current `workspace_id`.
-5. The agent injects document summaries into its prompt and calls tools such as `rag_search`, `load_skill`, and `save_output`.
-6. PPT generation is driven by `backend/skills/ppt/SKILL.md` and saves output files into the task panel.
-
-## Repository Map
-
-| Path | Purpose |
-| --- | --- |
-| `backend/src/api/routes.py` | FastAPI REST routes |
-| `backend/src/agent/graph.py` | LangGraph/LangChain agent entrypoint |
-| `backend/src/tools/` | Agent tools |
-| `backend/src/services/doc_service.py` | Document upload, parsing, chunking, summary, vector indexing |
-| `backend/src/storage/` | SQLite, ChromaDB, and file storage wrappers |
-| `backend/skills/` | Progressive-disclosure agent skills |
-| `backend/tests/` | Backend unit tests |
-| `frontend/src/app/` | Next.js app routes |
-| `frontend/src/components/` | Workspace, document, chat, task, and layout UI |
-| `frontend/src/lib/api.ts` | Frontend REST client |
-| `scripts/` | Local dev lifecycle scripts |
-| `docs/plans/` | Product and implementation planning notes |
-
-## Environment
-
-Copy the example and fill in secrets:
-
-```bash
-cp .env.example .env
-cp backend/.env.example backend/.env
-```
-
-Important variables:
-
-| Variable | Used By | Default |
-| --- | --- | --- |
-| `DASHSCOPE_API_KEY` | backend | required for real LLM and embedding calls |
-| `OPENAI_API_BASE` | backend | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `LLM_MODEL` | backend | `qwen-plus` for API services, `qwen3-plus` in agent graph unless overridden |
-| `EMBEDDING_MODEL` | backend | `text-embedding-v2` |
-| `DATA_DIR` | backend | `./data` relative to `backend/` when scripts run |
-| `NEXT_PUBLIC_API_BASE` | frontend | `http://localhost:8000` |
-| `NEXT_PUBLIC_LANGGRAPH_API_URL` | frontend | `http://localhost:2024` |
-
-## Common Commands
-
-Install frontend dependencies once:
-
-```bash
-cd frontend
-pnpm install
-```
-
-If `pnpm` is not installed, use `npm install`.
-
-Run a local health check:
-
-```bash
-./scripts/doctor.sh
-```
-
-Start all services:
-
-```bash
+# 启动所有服务
 ./scripts/start.sh
-```
 
-Run all services in a foreground terminal:
-
-```bash
-./scripts/dev.sh
-```
-
-Stop all services:
-
-```bash
+# 停止所有服务
 ./scripts/stop.sh
-```
 
-Restart all services:
-
-```bash
+# 重启所有服务
 ./scripts/restart.sh
+
+# 健康检查
+./scripts/doctor.sh
+
+# 后端测试
+cd backend && uv run pytest tests/
+
+# 前端 lint + build
+cd frontend && pnpm lint && pnpm build
 ```
 
-Run the standard verification suite:
+## 项目结构
 
-```bash
-./scripts/test.sh
+```
+train-agent/
+├── backend/
+│   ├── skills/             # Agent 技能（ppt、narration）
+│   ├── src/
+│   │   ├── api/            # FastAPI 路由 + 依赖注入
+│   │   ├── agent/          # LangGraph Agent 入口 + 状态管理
+│   │   ├── managers/       # 业务管理器（文档、TTS、提示词、技能、风格提取）
+│   │   ├── middlewares/    # Agent 中间件（上下文注入、摘要、日志等）
+│   │   ├── tools/          # Agent 工具（rag_search、save_ppt 等）
+│   │   ├── parsers/        # 文档解析器（PDF、DOCX、Markdown）
+│   │   ├── storage/        # 存储抽象层（SQLite、ChromaDB、FileStore）
+│   │   └── app_context.py  # 统一依赖入口
+│   ├── data/               # 运行时数据（SQLite、ChromaDB、文件）
+│   ├── tests/              # 后端测试
+│   ├── pyproject.toml      # Python 依赖定义
+│   ├── langgraph.json      # LangGraph 配置
+│   └── .env                # 环境变量（不提交）
+├── frontend/
+│   ├── src/
+│   │   ├── app/            # Next.js 路由（首页、工作区页）
+│   │   ├── components/     # UI 组件（chat、config、player、document、task）
+│   │   └── lib/            # API 客户端
+│   ├── package.json        # Node 依赖定义
+│   └── .next/              # 构建产物
+├── scripts/                # 开发运维脚本
+│   ├── init.sh             # 从零初始化
+│   ├── start.sh            # 启动所有服务
+│   ├── stop.sh             # 停止所有服务
+│   ├── restart.sh          # 重启所有服务
+│   └── doctor.sh           # 健康检查
+├── docs/                   # 架构文档
+├── AGENTS.md               # AI 协作规范
+└── README.md               # 本文档
 ```
 
-Backend-only tests:
+## 开发规范
 
-```bash
-cd backend
-uv run --extra dev pytest
-```
-
-Frontend checks:
-
-```bash
-cd frontend
-pnpm lint
-pnpm build
-```
-
-If `pnpm` is not installed, the scripts fall back to `npm`.
-
-## Development Notes
-
-- Keep runtime data under `backend/data/` or another `DATA_DIR`; do not commit generated data, logs, or local env files.
-- Add new agent tools under `backend/src/tools/` and register them in `backend/src/agent/graph.py`.
-- Add new skills as `backend/skills/<skill-name>/SKILL.md`.
-- Add backend tests for storage, services, tools, and skill behavior when changing those areas.
-- After frontend UI changes, run lint/build and visually verify the affected local page.
+- 详细开发规范、模块职责和代码约定见 `AGENTS.md`
+- 架构设计文档见 `docs/backend-architecture.md` 和 `docs/frontend-architecture.md`
+- 不要提交 `.env`、`backend/.env`、`logs/`、`backend/data/`、`.venv/`、`node_modules/`、`.next/`

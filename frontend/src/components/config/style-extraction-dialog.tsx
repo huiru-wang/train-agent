@@ -235,11 +235,6 @@ export function StyleExtractionDialog({
                   <div className="ml-6 mt-1.5 rounded-lg bg-muted/30 px-3 py-2">
                     <p className="text-xs font-medium text-foreground">
                       风格：{styleName}
-                      {rd?.style_name_en && (
-                        <span className="ml-1 text-muted-foreground">
-                          {rd.style_name_en}
-                        </span>
-                      )}
                     </p>
                     {shortDescription && (
                       <p className="mt-0.5 text-[11px] text-muted-foreground">

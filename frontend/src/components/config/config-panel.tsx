@@ -34,7 +34,7 @@ export function ConfigPanel({
   const [showExtractionUpload, setShowExtractionUpload] = useState(false);
   const [extractionTaskId, setExtractionTaskId] = useState<string | null>(null);
 
-  const selectedStyle = styles.find((s) => s.name_en === pptStyle);
+  const selectedStyle = styles.find((s) => s.id === pptStyle);
   const selectedVoice = voices.find((v) => v.id === voiceId);
 
   const handleStyleSelect = async (styleId: string) => {

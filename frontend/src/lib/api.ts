@@ -180,6 +180,13 @@ export async function uploadDocument(
     { method: "POST", body: formData }
   );
   if (!response.ok) {
+    if (response.status === 409) {
+      const body = await response.json().catch(() => ({}));
+      const message =
+        (body.detail as { message?: string })?.message ??
+        "文档已存在，请勿重复上传";
+      throw new Error(message);
+    }
     console.error(`[API] upload failed: ${response.status} ${response.statusText}`);
     throw new Error(`Upload failed: ${response.statusText}`);
   }

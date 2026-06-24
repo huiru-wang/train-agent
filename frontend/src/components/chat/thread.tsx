@@ -153,7 +153,7 @@ function isNearBottom(element: HTMLElement): boolean {
 // Thread (root)
 // ============================================================
 
-export function Thread({ visibleMessages, isLoading }: { visibleMessages: any[]; isLoading: boolean }) {
+export function Thread({ visibleMessages, isLoading, interrupt }: { visibleMessages: any[]; isLoading: boolean; interrupt?: { value?: unknown } }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const {
     error,
@@ -172,6 +172,11 @@ export function Thread({ visibleMessages, isLoading }: { visibleMessages: any[];
       initialScrollDone.current = false;
     }
   }, [visibleMessages.length]);
+
+  // Derive a stable boolean for whether an interrupt form is present.
+  // This ensures auto-scroll fires when InterruptBlock appears, even if
+  // visibleMessages.length and isLoading haven't changed.
+  const hasInterrupt = !!(interrupt && interrupt.value !== undefined);
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -192,10 +197,12 @@ export function Thread({ visibleMessages, isLoading }: { visibleMessages: any[];
       return;
     }
 
-    if (shouldStickToBottom.current) {
+    // When an interrupt form appears, always scroll to show it (it's an
+    // interactive element the user must see). Otherwise respect stick-to-bottom.
+    if (hasInterrupt || shouldStickToBottom.current) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
-  }, [visibleMessages.length, isLoading]);
+  }, [visibleMessages.length, isLoading, hasInterrupt]);
 
   const handleScroll = useCallback(async () => {
     const el = scrollRef.current;
@@ -257,9 +264,9 @@ export function Thread({ visibleMessages, isLoading }: { visibleMessages: any[];
 
 export function StableMessageList() {
   const { messages } = useMessageContext();
-  const { isLoading } = useStreamContext();
+  const { isLoading, interrupt } = useStreamContext();
   const visibleMessages = messages.filter((m: any) => !isHiddenMessage(m));
-  return <Thread visibleMessages={visibleMessages} isLoading={isLoading} />;
+  return <Thread visibleMessages={visibleMessages} isLoading={isLoading} interrupt={interrupt} />;
 }
 
 // ============================================================
@@ -532,6 +539,7 @@ const TOOL_LABELS: Record<string, string> = {
   save_ppt: "保存PPT",
   save_narration: "保存口播稿",
   get_ppt_detail: "获取PPT详情",
+  get_style_template: "获取风格模版",
   clarify_form: "信息收集",
 };
 
@@ -615,7 +623,7 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
     expandable: true,
     summary: ({ toolCall }) => {
       const query = getToolArgString(toolCall.args, ["query"]);
-      return query ? `查询：${truncateText(query)}` : "查询知识库";
+      return query ? `查询：${truncateText(query)}` : "";
     },
     details: ({ result }) => <ToolTextBlock value={extractToolResultText(result)} />,
   },
@@ -744,6 +752,11 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
   },
   get_ppt_detail: {
     label: () => "获取PPT详情",
+    expandable: false,
+    summary: () => "",
+  },
+  get_style_template: {
+    label: () => "获取风格模版",
     expandable: false,
     summary: () => "",
   },
@@ -1013,6 +1026,24 @@ function InterruptBlock() {
   // 防止重启后重复点击提交触发 "no pending protocol interrupt" 错误。
   const [localSubmitted, setLocalSubmitted] = useState(false);
 
+  // Reset localSubmitted when a genuinely NEW interrupt arrives (e.g. user
+  // cancelled a previous form and the agent issues a new one).  Use deep value
+  // comparison (stableStringify) instead of reference comparison to avoid false
+  // resets when the stream returns the same interrupt value with a new object
+  // reference during resume processing.
+  const prevInterruptRef = useRef<typeof interrupt>(undefined);
+  useEffect(() => {
+    const prev = prevInterruptRef.current;
+    if (interrupt !== prev && interrupt?.value !== undefined) {
+      const prevValue = (prev as { value?: unknown } | undefined)?.value;
+      const currValue = interrupt.value;
+      if (prevValue === undefined || stableStringify(prevValue) !== stableStringify(currValue)) {
+        setLocalSubmitted(false);
+      }
+    }
+    prevInterruptRef.current = interrupt;
+  }, [interrupt]);
+
   if (!interrupt || interrupt.value === undefined) return null;
   if (localSubmitted) return null;
 
@@ -1034,8 +1065,10 @@ function InterruptBlock() {
     ).map((field) => ({
       name: (field.name as string) || "",
       label: (field.label as string) || "",
-      type: (field.type as "text" | "select" | "multiselect") || "text",
+      type: (field.type as "select" | "multiselect") || "select",
       options: normalizeFieldOptions(field.options),
+      recommended: Array.isArray(field.recommended) ? field.recommended as string[] : undefined,
+      allow_custom: field.allow_custom === true,
       required: field.required !== false,
     }));
 

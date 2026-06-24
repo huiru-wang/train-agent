@@ -204,21 +204,20 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
 
   // Auto-recover from stale threadId
   useEffect(() => {
-    if (stream.error) {
-      const msg =
-        stream.error instanceof Error
-          ? stream.error.message
-          : String(stream.error);
-      // CancelledError = 主动取消（组件卸载/stop()），属于预期行为，无需报错
-      if (msg.includes("CancelledError")) return;
-      console.error("[Assistant] stream error:", stream.error);
-      if (
-        msg.includes("404") ||
-        msg.includes("not found") ||
-        msg.includes("Thread")
-      ) {
-        setThreadId(null);
-      }
+    if (!stream.error) return;
+    const msg =
+      stream.error instanceof Error
+        ? stream.error.message
+        : String(stream.error);
+    // CancelledError = 主动取消（组件卸载/stop()），属于预期行为，无需报错
+    if (msg.includes("CancelledError")) return;
+    console.error("[Assistant] stream error:", stream.error);
+    if (
+      msg.includes("404") ||
+      msg.includes("not found") ||
+      msg.includes("Thread")
+    ) {
+      setThreadId(null);
     }
   }, [stream.error]);
 
@@ -257,7 +256,10 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
           // invalidate the cache and return the updated message reference.
           const tcs = Array.isArray(msg?.tool_calls) ? msg.tool_calls.length : 0;
           const tcIds = tcs > 0 ? `:${msg.tool_calls.map((tc: any) => tc?.id || tc?.name || "").join(",")}` : "";
-          const key = `${id}|${len}|${tcs}${tcIds}`;
+          // Include args length fingerprint so that streaming arg updates
+          // invalidate the cache and the UI shows real-time parameters.
+          const tcArgsLen = tcs > 0 ? `:${msg.tool_calls.map((tc: any) => JSON.stringify(tc?.args ?? {}).length).join(",")}` : "";
+          const key = `${id}|${len}|${tcs}${tcIds}${tcArgsLen}`;
           const cached = cache.get(key);
           if (cached) {
             stableMessages.push(cached);
@@ -352,19 +354,24 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
   }, []);
 
   // ─── Memoized context values (only re-render consumers when data actually changes) ─────
-  const controlValue = useMemo<StreamControlValue>(() => ({
-    isLoading: stream.isLoading,
-    interrupt: stream.interrupt,
-    submit: stableSubmit,
-    stop: stableStop,
-    error: stream.error != null ? new Error(String(stream.error)) : null,
-    loadOlderMessages,
-    hasOlderMessages: historyNextCursor !== null,
-    isLoadingOlderMessages,
-    externalCommand: externalCommand ?? null,
-    onExternalCommandConsumed,
-    threadId,
-  }), [
+  const controlValue = useMemo<StreamControlValue>(() => {
+    const streamErrorMsg = stream.error != null ? String(stream.error) : "";
+    const isUserCancelled = streamErrorMsg.includes("CancelledError");
+    return {
+      isLoading: stream.isLoading,
+      interrupt: stream.interrupt,
+      submit: stableSubmit,
+      stop: stableStop,
+      // CancelledError = 用户主动中断，不视为错误，不传递 error UI
+      error: isUserCancelled ? null : stream.error != null ? new Error(streamErrorMsg) : null,
+      loadOlderMessages,
+      hasOlderMessages: historyNextCursor !== null,
+      isLoadingOlderMessages,
+      externalCommand: externalCommand ?? null,
+      onExternalCommandConsumed,
+      threadId,
+    };
+  }, [
     stream.isLoading, stream.interrupt, stableSubmit, stableStop, stream.error,
     loadOlderMessages, historyNextCursor, isLoadingOlderMessages,
     externalCommand, onExternalCommandConsumed, threadId,

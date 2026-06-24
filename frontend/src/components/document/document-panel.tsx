@@ -8,6 +8,7 @@ import {
   CheckCircle,
   Loader2,
   AlertCircle,
+  X,
 } from "lucide-react";
 import {
   listDocuments,
@@ -53,6 +54,7 @@ const FILE_TYPE_LABELS: Record<string, string> = {
 export function DocumentPanel({ workspaceId }: DocumentPanelProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocuments = useCallback(async () => {
@@ -80,19 +82,28 @@ export function DocumentPanel({ workspaceId }: DocumentPanelProps) {
 
     console.log(`[DocPanel] uploading ${files.length} file(s)`);
     setUploading(true);
+    setUploadError("");
+    const errors: string[] = [];
     try {
       for (const file of Array.from(files)) {
         console.log(`[DocPanel] uploading: ${file.name} (${file.size} bytes)`);
-        const result = await uploadDocument(workspaceId, file);
-        console.log(`[DocPanel] uploaded: id=${result.id} status=${result.status}`);
-        setDocuments((prev) => [
-          result,
-          ...prev.filter((doc) => doc.id !== result.id),
-        ]);
+        try {
+          const result = await uploadDocument(workspaceId, file);
+          console.log(`[DocPanel] uploaded: id=${result.id} status=${result.status}`);
+          setDocuments((prev) => [
+            result,
+            ...prev.filter((doc) => doc.id !== result.id),
+          ]);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : `上传 ${file.name} 失败`;
+          errors.push(msg);
+        }
+      }
+      if (errors.length > 0) {
+        setUploadError(errors.join("；"));
+        window.setTimeout(() => setUploadError(""), 5000);
       }
       await fetchDocuments();
-    } catch (err) {
-      console.error("[DocPanel] upload failed:", err);
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -136,6 +147,20 @@ export function DocumentPanel({ workspaceId }: DocumentPanelProps) {
           className="hidden"
         />
       </div>
+
+      {/* Upload error toast */}
+      {uploadError && (
+        <div className="mx-3 mt-2 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+          <AlertCircle size={14} className="mt-0.5 shrink-0 text-red-400" />
+          <p className="flex-1 text-xs leading-relaxed text-red-300">{uploadError}</p>
+          <button
+            onClick={() => setUploadError("")}
+            className="shrink-0 text-red-400/60 hover:text-red-300"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Document List */}
       <div className="flex-1 overflow-y-auto p-3">

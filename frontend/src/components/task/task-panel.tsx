@@ -260,7 +260,7 @@ function TaskItem({ task, workspaceId, styles, voices, onDeleted, onNarrate, onP
 
   // Derive style/voice name for subtitle
   const pptStyleName = task.type === "ppt" && resultData?.ppt_style
-    ? styles.find((s) => s.name_en === resultData.ppt_style)?.name || resultData.ppt_style
+    ? styles.find((s) => s.id === resultData.ppt_style)?.name || resultData.ppt_style
     : "";
   const voiceName = task.type === "narration" && resultData?.voice_name
     ? resultData.voice_name
