@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from src.api.deps import db, doc_service, file_store, skill_manager, style_extract_manager, vector_store
 from src.managers.doc_manager import DuplicateDocumentError
-from src.storage.database import _BUILTIN_VOICES
+from src.storage.seeds import _BUILTIN_VOICES
 
 logger = logging.getLogger(__name__)
 

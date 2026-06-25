@@ -189,16 +189,23 @@ export function StyleExtractionDialog({
         className="mx-4 flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-border bg-background shadow-2xl"
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
-          <h3 className="text-sm font-semibold text-foreground">
-            视觉风格提取
-          </h3>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <X size={16} />
-          </button>
+        <div className="flex shrink-0 flex-col border-b border-border px-5 py-3.5">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              视觉风格提取
+            </h3>
+            <button
+              onClick={onClose}
+              className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {!isCompleted && !isFailed && (
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              预计需要 5 分钟完成，可关闭窗口。任务已在「产出」中，随时可查看进度。
+            </p>
+          )}
         </div>
 
         {/* Content */}

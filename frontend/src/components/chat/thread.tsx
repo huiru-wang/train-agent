@@ -543,6 +543,12 @@ const TOOL_LABELS: Record<string, string> = {
   clarify_form: "信息收集",
 };
 
+// Skill name -> Chinese display name mapping
+const SKILL_NAME_LABELS: Record<string, string> = {
+  "html-ppt": "PPT技能",
+  "narrate": "口播稿技能",
+};
+
 function getToolLabel(name: string): string {
   return TOOL_LABELS[name] || name;
 }
@@ -635,11 +641,12 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
   load_skill: {
     label: ({ toolCall }) => {
       const skillName = getToolArgString(toolCall.args, ["skill_name", "name"]);
+      const displayName = skillName ? (SKILL_NAME_LABELS[skillName] || skillName) : "";
       const filePaths = toolCall.args["file_paths"] as string[] | undefined;
       if (filePaths && filePaths.length > 0) {
-        return skillName ? `读取技能：${skillName}` : "读取技能";
+        return displayName ? `读取技能：${displayName}` : "读取技能";
       }
-      return skillName ? `读取技能：${skillName}` : "读取技能";
+      return displayName ? `读取技能：${displayName}` : "读取技能";
     },
     expandable: false,
     summary: ({ toolCall }) => {
@@ -1241,10 +1248,7 @@ function SlashCommandMenu({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-accent">
-                {cmd.command}
-              </span>
-              <span className="text-sm">{cmd.label}</span>
+              <span className="text-sm font-medium">{cmd.label}</span>
             </div>
             <p className="text-xs text-muted-foreground/70 truncate">
               {cmd.description}

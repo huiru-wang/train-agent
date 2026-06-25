@@ -15,7 +15,7 @@ interface StylePickerDialogProps {
 const CATEGORY_LABELS: Record<string, string> = {
   dark: "深色主题",
   light: "浅色主题",
-  custom: "自定义主题",
+  custom: "我的主题",
 };
 
 export function StylePickerDialog({
@@ -224,7 +224,7 @@ export function StylePickerDialog({
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl border border-border bg-background p-5 shadow-2xl">
             <h3 className="text-sm font-semibold text-foreground">
-              确认删除该自定义主题？
+              确认删除该主题？
             </h3>
             <p className="mt-2 text-xs text-muted-foreground">
               删除后无法恢复，关联的预览文件也会一并清除。

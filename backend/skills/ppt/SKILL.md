@@ -303,8 +303,7 @@ The HTML must be fully self-contained (all CSS/JS inline). Do NOT use terminal c
 ### Step 4.2: Confirm to User
 
 Summarize — Tell the user:
-   - File location, style name, slide count
-   - How to customize: `:root` CSS variables for colors, font link for typography, `.reveal` class for animations
+   - style name, slide count
    - Inline editing: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
 
 ---

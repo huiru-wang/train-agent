@@ -8,7 +8,8 @@ from langchain.tools import tool, ToolRuntime
 
 from src.agent.state import TrainAgentState
 from src.managers.tts_manager import TTSManager
-from src.storage.database import Database, _BUILTIN_VOICES
+from src.storage.database import Database
+from src.storage.seeds import _BUILTIN_VOICES
 from src.storage.file_store import FileStore
 
 logger = logging.getLogger(__name__)
