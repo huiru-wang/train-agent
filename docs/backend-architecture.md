@@ -639,8 +639,8 @@ skills/
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `DEEPSEEK_API_KEY` | 必填 | DeepSeek API 密钥 |
-| `DEEPSEEK_API_BASE` | `https://api.deepseek.com` | DeepSeek API 地址 |
+| `OPENAI_API_KEY` | 必填 | DeepSeek API 密钥 |
+| `OPENAI_API_BASE` | `https://api.deepseek.com` | DeepSeek API 地址 |
 | `MAIN_MODEL` | `deepseek-v4-flash` | Agent 图使用的 LLM 模型 |
 | `SUMMARIZATION_API_KEY` | — | 摘要生成 API 密钥 |
 | `SUMMARIZATION_API_BASE` | `https://api.deepseek.com` | 摘要生成 API 地址 |

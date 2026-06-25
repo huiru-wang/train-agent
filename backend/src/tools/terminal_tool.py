@@ -1,4 +1,7 @@
-"""Terminal tool — lets the agent execute shell commands."""
+"""
+Terminal tool — lets the agent execute shell commands.
+暂时不使用，如果后续需要使用，完整构建Sandbox沙箱模块后再启用
+"""
 
 import asyncio
 import logging

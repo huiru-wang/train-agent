@@ -1,17 +1,18 @@
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *.egg-info/
 .venv/
-backend/.uv-cache/
+.uv-cache/
 
 # Node
 node_modules/
 .next/
 
 # Data (runtime generated)
-backend/data/
-backend/.langgraph_api/
+data/
+.langgraph_api/
 
 # Logs & Runtime
 logs/

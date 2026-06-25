@@ -49,12 +49,12 @@ class PromptManager:
 
     def _get_style_prompt_template(self) -> str:
         if self._style_prompt_template is None:
-            path = _PROMPTS_DIR / "style_prompt.md"
+            path = _PROMPTS_DIR / "style_extract_prompt.md"
             try:
                 self._style_prompt_template = path.read_text(encoding="utf-8")
             except FileNotFoundError:
-                logger.warning("[PromptManager] style_prompt.md not found at %s", path)
-                self._style_prompt_template = "# ERROR: style_prompt.md not found"
+                logger.warning("[PromptManager] style_extract_prompt.md not found at %s", path)
+                self._style_prompt_template = "# ERROR: style_extract_prompt.md not found"
         return self._style_prompt_template
 
     def _get_cover_html_prompt_template(self) -> str:

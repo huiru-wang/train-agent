@@ -641,7 +641,7 @@ const TOOL_DISPLAY_CONFIG: Record<string, ToolDisplayConfig> = {
       }
       return skillName ? `读取技能：${skillName}` : "读取技能";
     },
-    expandable: true,
+    expandable: false,
     summary: ({ toolCall }) => {
       const skillName = getToolArgString(toolCall.args, ["skill_name", "name"]);
       const filePaths = toolCall.args["file_paths"] as string[] | undefined;

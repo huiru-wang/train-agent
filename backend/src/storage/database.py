@@ -2,6 +2,7 @@ import random
 import uuid
 from datetime import datetime
 import json
+from pathlib import Path
 from typing import Any
 
 import aiosqlite
@@ -185,7 +186,10 @@ class Database:
                 "ALTER TABLE ppt_style ADD COLUMN resource_manifest TEXT DEFAULT '[]'"
             )
 
-        # Seed builtin PPT styles
+        # Clear old system styles and re-seed
+        await self.connection.execute(
+            "DELETE FROM ppt_style WHERE user_id = 'system'"
+        )
         for style in _BUILTIN_PPT_STYLES:
             await self.connection.execute(
                 """INSERT OR IGNORE INTO ppt_style
@@ -803,195 +807,70 @@ class Database:
         await self.connection.commit()
 
 
+
+def _load_style_description(name_en: str) -> str:
+    """Load style_description from the prompt .md file (strip YAML frontmatter)."""
+    md_path = Path(__file__).resolve().parents[2] / "skills" / "ppt" / "references" / "styles" / f"{name_en}.md"
+    text = md_path.read_text(encoding="utf-8")
+    # Strip YAML frontmatter (--- ... ---)
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        if end != -1:
+            text = text[end + 3:].lstrip("\n")
+    return text
+
+
 # System builtin PPT style seed data
 _BUILTIN_PPT_STYLES = [
     {
-        "id": "sys-bold-signal",
+        "id": "sys-magazine-ink",
         "user_id": "system",
         "category": "dark",
-        "name": "醒目信号",
-        "name_en": "bold-signal",
-        "description": "暗色渐变底 + 醒目色卡 + 巨大序号，视觉冲击拉满",
-        "preview_path": "01-bold-signal.html",
-        "style_description": (
-            "**Vibe:** Confident, bold, modern, high-impact\n\n"
-            "**Layout:** Colored card on dark gradient. Number top-left, navigation top-right, title bottom-left.\n\n"
-            "**Typography:**\n- Display: `Archivo Black` (900)\n- Body: `Space Grotesk` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-primary: #1a1a1a;\n    --bg-gradient: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);\n    --card-bg: #FF5722;\n    --text-primary: #ffffff;\n    --text-on-card: #1a1a1a;\n}\n```\n\n"
-            "**Signature Elements:**\n- Bold colored card as focal point (orange, coral, or vibrant accent)\n- Large section numbers (01, 02, etc.)\n- Navigation breadcrumbs with active/inactive opacity states\n- Grid-based layout for precise alignment"
-        ),
+        "name": "墨纸杂志",
+        "name_en": "magazine-ink",
+        "description": "纯墨黑与暖米白的高对比纸媒美学，衬线大字与等宽标签营造编辑感，适合深度内容与品牌发布。",
+        "preview_path": "magazine-ink.html",
+        "style_description": _load_style_description("magazine-ink"),
     },
     {
-        "id": "sys-electric-studio",
-        "user_id": "system",
-        "category": "dark",
-        "name": "电光工作室",
-        "name_en": "electric-studio",
-        "description": "上下蓝白分屏，以引用排版为视觉焦点，干净利落",
-        "preview_path": "02-electric-studio.html",
-        "style_description": (
-            "**Vibe:** Bold, clean, professional, high contrast\n\n"
-            "**Layout:** Split panel—white top, blue bottom. Brand marks in corners.\n\n"
-            "**Typography:**\n- Display: `Manrope` (800)\n- Body: `Manrope` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-dark: #0a0a0a;\n    --bg-white: #ffffff;\n    --accent-blue: #4361ee;\n    --text-dark: #0a0a0a;\n    --text-light: #ffffff;\n}\n```\n\n"
-            "**Signature Elements:**\n- Two-panel vertical split\n- Accent bar on panel edge\n- Quote typography as hero element\n- Minimal, confident spacing"
-        ),
-    },
-    {
-        "id": "sys-creative-voltage",
-        "user_id": "system",
-        "category": "dark",
-        "name": "创意电压",
-        "name_en": "creative-voltage",
-        "description": "电光蓝与暗色左右分屏，霓虹黄高亮 + 半调纹理",
-        "preview_path": "03-creative-voltage.html",
-        "style_description": (
-            "**Vibe:** Bold, creative, energetic, retro-modern\n\n"
-            "**Layout:** Split panels—electric blue left, dark right. Script accents.\n\n"
-            "**Typography:**\n- Display: `Syne` (700/800)\n- Mono: `Space Mono` (400/700)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-primary: #0066ff;\n    --bg-dark: #1a1a2e;\n    --accent-neon: #d4ff00;\n    --text-light: #ffffff;\n}\n```\n\n"
-            "**Signature Elements:**\n- Electric blue + neon yellow contrast\n- Halftone texture patterns\n- Neon badges/callouts\n- Script typography for creative flair"
-        ),
-    },
-    {
-        "id": "sys-dark-botanical",
-        "user_id": "system",
-        "category": "dark",
-        "name": "暗黑植物",
-        "name_en": "dark-botanical",
-        "description": "暗底 + 暖色柔光球 + 优雅衬线斜体，静谧高级",
-        "preview_path": "04-dark-botanical.html",
-        "style_description": (
-            "**Vibe:** Elegant, sophisticated, artistic, premium\n\n"
-            "**Layout:** Centered content on dark. Abstract soft shapes in corner.\n\n"
-            "**Typography:**\n- Display: `Cormorant` (400/600) — elegant serif\n- Body: `IBM Plex Sans` (300/400)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-primary: #0f0f0f;\n    --text-primary: #e8e4df;\n    --text-secondary: #9a9590;\n    --accent-warm: #d4a574;\n    --accent-pink: #e8b4b8;\n    --accent-gold: #c9b896;\n}\n```\n\n"
-            "**Signature Elements:**\n- Abstract soft gradient circles (blurred, overlapping)\n- Warm color accents (pink, gold, terracotta)\n- Thin vertical accent lines\n- Italic signature typography\n- **No illustrations—only abstract CSS shapes**"
-        ),
-    },
-    {
-        "id": "sys-neon-cyber",
-        "user_id": "system",
-        "category": "dark",
-        "name": "霓虹赛博",
-        "name_en": "neon-cyber",
-        "description": "深空蓝底 + 粒子动画 + 青色/品红霓虹光晕",
-        "preview_path": "09-neon-cyber.html",
-        "style_description": (
-            "**Vibe:** Futuristic, techy, confident\n\n"
-            "**Typography:** `Clash Display` + `Satoshi` (Fontshare)\n\n"
-            "**Colors:** Deep navy (#0a0f1c), cyan accent (#00ffcc), magenta (#ff00aa)\n\n"
-            "**Signature:** Particle backgrounds, neon glow, grid patterns"
-        ),
-    },
-    {
-        "id": "sys-terminal-green",
-        "user_id": "system",
-        "category": "dark",
-        "name": "终端黑客",
-        "name_en": "terminal-green",
-        "description": "终端窗口 + 闪烁绿光标 + 扫描线，极客美学",
-        "preview_path": "10-terminal-green.html",
-        "style_description": (
-            "**Vibe:** Developer-focused, hacker aesthetic\n\n"
-            "**Typography:** `JetBrains Mono` (monospace only)\n\n"
-            "**Colors:** GitHub dark (#0d1117), terminal green (#39d353)\n\n"
-            "**Signature:** Scan lines, blinking cursor, code syntax styling"
-        ),
-    },
-    {
-        "id": "sys-notebook-tabs",
+        "id": "sys-cream-brutalism",
         "user_id": "system",
         "category": "light",
-        "name": "笔记标签",
-        "name_en": "notebook-tabs",
-        "description": "奶白纸卡 + 右侧彩色标签 + 左侧活页孔，编辑质感",
-        "preview_path": "05-notebook-tabs.html",
-        "style_description": (
-            "**Vibe:** Editorial, organized, elegant, tactile\n\n"
-            "**Layout:** Cream paper card on dark background. Colorful tabs on right edge.\n\n"
-            "**Typography:**\n- Display: `Bodoni Moda` (400/700) — classic editorial\n- Body: `DM Sans` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-outer: #2d2d2d;\n    --bg-page: #f8f6f1;\n    --text-primary: #1a1a1a;\n    --tab-1: #98d4bb; /* Mint */\n    --tab-2: #c7b8ea; /* Lavender */\n    --tab-3: #f4b8c5; /* Pink */\n    --tab-4: #a8d8ea; /* Sky */\n    --tab-5: #ffe6a7; /* Cream */\n}\n```\n\n"
-            "**Signature Elements:**\n- Paper container with subtle shadow\n- Colorful section tabs on right edge (vertical text)\n- Binder hole decorations on left\n- Tab text must scale with viewport: `font-size: clamp(0.5rem, 1vh, 0.7rem)`"
-        ),
+        "name": "奶油粗野主义",
+        "name_en": "cream-brutalism",
+        "description": "奶白底黑框的粗野主义信息图，糖果色卡片与大号数据，适合趋势解读与知识分享。",
+        "preview_path": "cream-brutalism.html",
+        "style_description": _load_style_description("cream-brutalism"),
     },
     {
-        "id": "sys-pastel-geometry",
+        "id": "sys-dark-soft-glow",
         "user_id": "system",
-        "category": "light",
-        "name": "粉彩几何",
-        "name_en": "pastel-geometry",
-        "description": "柔和粉彩底 + 圆角白卡 + 右侧竖排彩色药丸标签",
-        "preview_path": "06-pastel-geometry.html",
-        "style_description": (
-            "**Vibe:** Friendly, organized, modern, approachable\n\n"
-            "**Layout:** White card on pastel background. Vertical pills on right edge.\n\n"
-            "**Typography:**\n- Display: `Plus Jakarta Sans` (700/800)\n- Body: `Plus Jakarta Sans` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-primary: #c8d9e6;\n    --card-bg: #faf9f7;\n    --pill-pink: #f0b4d4;\n    --pill-mint: #a8d4c4;\n    --pill-sage: #5a7c6a;\n    --pill-lavender: #9b8dc4;\n    --pill-violet: #7c6aad;\n}\n```\n\n"
-            "**Signature Elements:**\n- Rounded card with soft shadow\n- **Vertical pills on right edge** with varying heights (like tabs)\n- Consistent pill width, heights: short → medium → tall → medium → short\n- Download/action icon in corner"
-        ),
-    },
-    {
-        "id": "sys-split-pastel",
-        "user_id": "system",
-        "category": "light",
-        "name": "分屏粉彩",
-        "name_en": "split-pastel",
-        "description": "蜜桃/薰衣草左右分屏 + 可爱圆角徽章 + 网格纹理",
-        "preview_path": "07-split-pastel.html",
-        "style_description": (
-            "**Vibe:** Playful, modern, friendly, creative\n\n"
-            "**Layout:** Two-color vertical split (peach left, lavender right).\n\n"
-            "**Typography:**\n- Display: `Outfit` (700/800)\n- Body: `Outfit` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-peach: #f5e6dc;\n    --bg-lavender: #e4dff0;\n    --text-dark: #1a1a1a;\n    --badge-mint: #c8f0d8;\n    --badge-yellow: #f0f0c8;\n    --badge-pink: #f0d4e0;\n}\n```\n\n"
-            "**Signature Elements:**\n- Split background colors\n- Playful badge pills with icons\n- Grid pattern overlay on right panel\n- Rounded CTA buttons"
-        ),
-    },
-    {
-        "id": "sys-vintage-editorial",
-        "user_id": "system",
-        "category": "light",
-        "name": "复古编辑",
-        "name_en": "vintage-editorial",
-        "description": "奶油底色 + 几何线条装饰 + 粗边框按钮，老派印刷感",
-        "preview_path": "08-vintage-editorial.html",
-        "style_description": (
-            "**Vibe:** Witty, confident, editorial, personality-driven\n\n"
-            "**Layout:** Centered content on cream. Abstract geometric shapes as accent.\n\n"
-            "**Typography:**\n- Display: `Fraunces` (700/900) — distinctive serif\n- Body: `Work Sans` (400/500)\n\n"
-            "**Colors:**\n```css\n:root {\n    --bg-cream: #f5f3ee;\n    --text-primary: #1a1a1a;\n    --text-secondary: #555;\n    --accent-warm: #e8d4c0;\n}\n```\n\n"
-            "**Signature Elements:**\n- Abstract geometric shapes (circle outline + line + dot)\n- Bold bordered CTA boxes\n- Witty, conversational copy style\n- **No illustrations—only geometric CSS shapes**"
-        ),
+        "category": "dark",
+        "name": "暗色柔光",
+        "name_en": "dark-soft-glow",
+        "description": "深黑底搭配柔焦暖色光晕，衬线标题与极简几何线条，适合高端宣讲与品牌发布会。",
+        "preview_path": "dark-soft-glow.html",
+        "style_description": _load_style_description("dark-soft-glow"),
     },
     {
         "id": "sys-swiss-modern",
         "user_id": "system",
         "category": "light",
-        "name": "瑞士网格",
+        "name": "瑞士国际风",
         "name_en": "swiss-modern",
-        "description": "纯白黑红三色 + 可见十二列网格 + 不对称布局",
-        "preview_path": "11-swiss-modern.html",
-        "style_description": (
-            "**Vibe:** Clean, precise, Bauhaus-inspired\n\n"
-            "**Typography:** `Archivo` (800) + `Nunito` (400)\n\n"
-            "**Colors:** Pure white, pure black, red accent (#ff3300)\n\n"
-            "**Signature:** Visible grid, asymmetric layouts, geometric shapes"
-        ),
+        "description": "以安全橙为单一强调色的瑞士国际主义风格，强调网格秩序、无衬线大字重对比与几何抽象装饰，适用于企业培训、安全宣贯类演示。",
+        "preview_path": "swiss-modern.html",
+        "style_description": _load_style_description("swiss-modern"),
     },
     {
-        "id": "sys-paper-and-ink",
+        "id": "sys-peach-lavender-split",
         "user_id": "system",
         "category": "light",
-        "name": "纸墨书香",
-        "name_en": "paper-and-ink",
-        "description": "奶油纸质感 + 首字下沉 + 优雅横线分隔，文学气息",
-        "preview_path": "12-paper-ink.html",
-        "style_description": (
-            "**Vibe:** Editorial, literary, thoughtful\n\n"
-            "**Typography:** `Cormorant Garamond` + `Source Serif 4`\n\n"
-            "**Colors:** Warm cream (#faf9f7), charcoal (#1a1a1a), crimson accent (#c41e3a)\n\n"
-            "**Signature:** Drop caps, pull quotes, elegant horizontal rules"
-        ),
+        "name": "桃紫分境",
+        "name_en": "peach-lavender-split",
+        "description": "桃粉与薰衣草紫左右分屏，糖果色标签卡片，适合轻松培训与知识分享。",
+        "preview_path": "peach-lavender-split.html",
+        "style_description": _load_style_description("peach-lavender-split"),
     },
 ]
 

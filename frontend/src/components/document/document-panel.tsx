@@ -125,7 +125,7 @@ export function DocumentPanel({ workspaceId }: DocumentPanelProps) {
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h3 className="text-sm font-medium text-foreground">知识库</h3>
+        <h3 className="text-sm font-medium text-foreground">📚 知识库</h3>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}

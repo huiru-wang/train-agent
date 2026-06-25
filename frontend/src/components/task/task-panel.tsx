@@ -107,7 +107,7 @@ export function TaskPanel({ workspaceId, styles, voices, onNarrate, onPlayNarrat
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center border-b border-border px-4 py-3">
-        <h3 className="text-sm font-medium text-foreground">产出</h3>
+        <h3 className="text-sm font-medium text-foreground">📦 产出</h3>
       </div>
 
       {/* Task List */}

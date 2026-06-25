@@ -6,7 +6,7 @@ from langchain_core.messages.utils import get_buffer_string
 from langgraph.constants import TAG_NOSTREAM
 
 
-class TrainAgentSummarizationMiddleware(SummarizationMiddleware):
+class SummarizationMiddleware(SummarizationMiddleware):
     """Train Agent summarization with UI-safe markers and a simple cooldown."""
 
     def __init__(

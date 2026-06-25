@@ -17,8 +17,8 @@ def create_graph(ctx: AppContext):
     # --- Model ---
     model = ChatOpenAI(
         model=os.getenv("MAIN_MODEL"),
-        api_key=os.getenv("DEEPSEEK_API_KEY"),
-        base_url=os.getenv("DEEPSEEK_API_BASE"),
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_API_BASE"),
         streaming=True,
         extra_body={"enable_thinking": True},
     )
