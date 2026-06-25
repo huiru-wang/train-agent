@@ -259,8 +259,11 @@ function TaskItem({ task, workspaceId, styles, voices, onDeleted, onNarrate, onP
   const canViewStyleExtraction = task.type === "ppt_style_extraction" && !!onViewStyleExtraction;
 
   // Derive style/voice name for subtitle
-  const pptStyleName = task.type === "ppt" && resultData?.ppt_style
-    ? styles.find((s) => s.id === resultData.ppt_style)?.name || resultData.ppt_style
+  const pptStyleName = task.type === "ppt" && resultData
+    ? resultData.ppt_style_name
+      || styles.find((s) => s.id === resultData.ppt_style || s.name_en === resultData.ppt_style)?.name
+      || resultData.ppt_style
+      || ""
     : "";
   const voiceName = task.type === "narration" && resultData?.voice_name
     ? resultData.voice_name

@@ -115,7 +115,7 @@ class Database:
         if "ext_data" not in ws_columns:
             default_voice_info = get_default_voice_info("Cherry")
             default_ext = json.dumps(
-                {"ppt_style": "swiss-modern", "voice_info": default_voice_info},
+                {"ppt_style": "sys-swiss-modern", "voice_info": default_voice_info},
                 ensure_ascii=False,
             )
             await self.connection.execute(
@@ -145,6 +145,11 @@ class Database:
             # Remove standalone voice_id (now inside voice_info.id)
             if "voice_id" in ext:
                 del ext["voice_id"]
+                changed = True
+            # Migrate: old ppt_style name_en → style ID
+            ppt_val = ext.get("ppt_style", "")
+            if ppt_val and not ppt_val.startswith("sys-"):
+                ext["ppt_style"] = f"sys-{ppt_val}"
                 changed = True
             if changed:
                 await self.connection.execute(
@@ -227,7 +232,7 @@ class Database:
         default_voice_info = get_default_voice_info("Cherry")
 
         # Randomly pick a system style as default ppt_style
-        default_style_id = "swiss-modern"  # fallback
+        default_style_id = "sys-swiss-modern"  # fallback
         try:
             cursor = await self.connection.execute(
                 "SELECT id FROM ppt_style WHERE user_id = 'system'"

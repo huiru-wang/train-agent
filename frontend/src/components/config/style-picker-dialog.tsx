@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { X, Check, ArrowLeft, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { X, Check, ArrowLeft, Trash2, Loader2 } from "lucide-react";
 import { deletePptStyle, type PptStyleInfo } from "@/lib/api";
 
 interface StylePickerDialogProps {
@@ -27,6 +27,7 @@ export function StylePickerDialog({
 }: StylePickerDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const [previewStyle, setPreviewStyle] = useState<PptStyleInfo | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -38,6 +39,7 @@ export function StylePickerDialog({
           setConfirmDeleteId(null);
         } else if (previewStyle) {
           setPreviewStyle(null);
+          setPreviewLoading(false);
         } else {
           onClose();
         }
@@ -71,6 +73,11 @@ export function StylePickerDialog({
       setConfirmDeleteId(null);
     }
   };
+
+  const handlePreview = useCallback((style: PptStyleInfo) => {
+    setPreviewLoading(true);
+    setPreviewStyle(style);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -114,11 +121,18 @@ export function StylePickerDialog({
 
         {/* Content: picker grid or preview iframe */}
         {previewStyle ? (
-          <div className="flex-1 overflow-hidden">
+          <div className="relative flex-1 overflow-hidden">
+            {/* Loading overlay */}
+            {previewLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+                <Loader2 size={28} className="animate-spin text-muted-foreground" />
+              </div>
+            )}
             <iframe
               src={getPreviewUrl(previewStyle)}
               title={`${previewStyle.name} 全屏预览`}
-              className="h-full w-full border-0"
+              className={`h-full w-full border-0 transition-opacity duration-300 ${previewLoading ? "opacity-0" : "opacity-100"}`}
+              onLoad={() => setPreviewLoading(false)}
             />
           </div>
         ) : (
@@ -186,7 +200,7 @@ export function StylePickerDialog({
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPreviewStyle(style);
+                                  handlePreview(style);
                                 }}
                                 className="rounded-md bg-accent/15 px-2.5 py-1 text-[10px] font-medium text-accent transition-colors hover:bg-accent/25"
                               >

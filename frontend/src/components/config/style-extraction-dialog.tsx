@@ -191,7 +191,7 @@ export function StyleExtractionDialog({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
           <h3 className="text-sm font-semibold text-foreground">
-            PPT 风格提取
+            视觉风格提取
           </h3>
           <button
             onClick={onClose}

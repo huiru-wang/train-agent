@@ -1181,6 +1181,7 @@ interface SlashCommand {
   label: string;
   description: string;
   icon: React.ReactNode;
+  placeholder?: string;
 }
 
 const SLASH_COMMANDS: SlashCommand[] = [
@@ -1189,12 +1190,14 @@ const SLASH_COMMANDS: SlashCommand[] = [
     label: "生成培训PPT",
     description: "基于知识库文档生成 HTML 演示文稿",
     icon: <FileOutput size={14} />,
+    placeholder: "还可以输入PPT主题、页数、内容要求...",
   },
   {
     command: "/narrate",
     label: "生成口播稿",
     description: "基于PPT大纲生成口播稿并合成音频",
     icon: <Mic size={14} />,
+    placeholder: "还可以输入口播稿风格、时长、内容详略要求...",
   },
 ];
 
@@ -1409,10 +1412,14 @@ function ChatInput() {
         <button
           type="button"
           onMouseDown={(e) => { e.preventDefault(); openSkillMenu(); }}
-          title="技能"
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${activeCommand
-            ? "bg-accent/20 text-accent"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-accent"
+          disabled={isLoading}
+          title={isLoading ? "任务执行中..." : "技能"}
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
+            isLoading
+              ? "cursor-not-allowed text-muted-foreground/40"
+              : activeCommand
+                ? "bg-accent/20 text-accent"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-accent"
             }`}
         >
           <Zap size={16} />
@@ -1440,7 +1447,7 @@ function ChatInput() {
             }
             setTimeout(() => setShowCommands(false), 150);
           }}
-          placeholder={activeCommand ? "输入具体要求..." : "输入消息... 输入 / 查看可用命令"}
+          placeholder={activeCommand?.placeholder || (activeCommand ? "输入具体要求..." : "输入消息... 输入 / 查看可用命令")}
           disabled={isLoading}
           className="min-h-[36px] flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
           autoFocus

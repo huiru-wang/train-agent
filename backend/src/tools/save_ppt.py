@@ -73,6 +73,17 @@ async def save_ppt_artifact(
             "ppt_style": ppt_style,
         }
 
+        # Look up style name for display (best-effort, never block saving)
+        if ppt_style:
+            try:
+                style_record = await db.get_ppt_style(ppt_style)
+                if not style_record:
+                    style_record = await db.get_ppt_style_by_name_en(ppt_style)
+                if style_record:
+                    result_data["ppt_style_name"] = style_record["name"]
+            except Exception:
+                logger.warning("[save_ppt] failed to look up style name for ppt_style=%s", ppt_style, exc_info=True)
+
         # Parse and include outline if provided
         if outline:
             try:

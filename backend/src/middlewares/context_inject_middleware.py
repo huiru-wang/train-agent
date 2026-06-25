@@ -77,11 +77,25 @@ class ContextInjectMiddleware(AgentMiddleware):
                     child_labels.append(label)
                 children_text = ", ".join(child_labels) if child_labels else "无"
 
+                # Resolve style name for dedup naming
+                ppt_style_name = result_data.get("ppt_style_name", "")
+                if not ppt_style_name and result_data.get("ppt_style"):
+                    # Fallback: look up style name from DB
+                    try:
+                        style_rec = await self.db.get_ppt_style(result_data["ppt_style"])
+                        if not style_rec:
+                            style_rec = await self.db.get_ppt_style_by_name_en(result_data["ppt_style"])
+                        if style_rec:
+                            ppt_style_name = style_rec.get("name", "")
+                    except Exception:
+                        pass
+
                 ppt_tasks_info.append({
                     "id": task["id"],
                     "title": task.get("title", "未命名"),
                     "topic": topic,
                     "summary": summary,
+                    "style": ppt_style_name,
                     "children": children_text,
                 })
 
@@ -157,16 +171,17 @@ class ContextInjectMiddleware(AgentMiddleware):
             rows = []
             for t in ppt_tasks_info:
                 rows.append(
-                    f"| {t['id']} | {t['title']} | {t['topic']} | {t['summary']} | {t['children']} |"
+                    f"| {t['id']} | {t['title']} | {t['topic']} | {t['summary']} | {t.get('style', '')} | {t['children']} |"
                 )
             table = (
-                "| 任务ID | 标题 | 主题 | 摘要 | 子任务 |\n"
-                "|--------|------|------|------|--------|\n"
+                "| 任务ID | 标题 | 主题 | 摘要 | 风格 | 子任务 |\n"
+                "|--------|------|------|------|------|--------|\n"
             ) + "\n".join(rows)
             prompt += (
                 f"\n\n## 当前PPT产出\n"
                 f"以下是当前工作区已生成的 PPT，可用于口播稿生成等后续操作。\n"
-                f"当用户请求生成口播稿但未指定 PPT 时，从此表格中引导用户选择。\n\n"
+                f"当用户请求生成口播稿但未指定 PPT 时，从此表格中引导用户选择。\n"
+                f"生成新 PPT 时，必须检查此列表避免标题重复——若主题相同，参考「风格」列在标题后追加括号区分。\n\n"
                 f"{table}"
             )
 

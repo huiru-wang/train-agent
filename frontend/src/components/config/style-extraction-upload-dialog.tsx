@@ -87,7 +87,7 @@ export function StyleExtractionUploadDialog({
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-foreground">
-            PPT 风格提取
+            视觉风格提取
           </h3>
           <button
             onClick={onClose}
@@ -144,8 +144,8 @@ export function StyleExtractionUploadDialog({
           <p className="mt-3 text-xs text-red-400">{error}</p>
         )}
 
-        <p className="mt-4 text-[10px] leading-relaxed text-muted-foreground">
-          上传后系统将自动解析 PPTX 文件并通过AI提取视觉风格，生成可复用的风格模板。风格提取不会完整复刻原PPT文件，而是提取关键元素、样式、布局、配色方案等关键信息。
+        <p className="mt-4 text-[12px] leading-relaxed text-muted-foreground">
+          上传后将自动解析 PPTX 文件并通过AI提取视觉风格，生成可复用的风格模板。<span className="font-bold text-foreground">视觉风格提取不会完整复刻原PPT文件，而是提取关键元素、样式、布局、配色方案等关键信息。</span>
         </p>
       </div>
     </div>
