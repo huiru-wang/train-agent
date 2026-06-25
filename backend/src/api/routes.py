@@ -391,6 +391,49 @@ _FONT_LINK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Regex for stripping viewport-related @media blocks (max-width, max-height, etc.)
+# These break thumbnail rendering because they trigger at the small iframe viewport.
+_VIEWPORT_MEDIA_RE = re.compile(
+    r'@media\s*\([^)]*(?:max-width|min-width|max-height|min-height)[^)]*\)\s*\{(?:[^{}]*|\{[^{}]*\})*\}',
+    re.DOTALL | re.IGNORECASE,
+)
+
+# CSS + JS injected before </head> in thumbnail mode.
+# Forces .slide to a fixed 1920x1080 reference size and scales via transform.
+_THUMB_INJECT = """<style>
+html,body{margin:0;padding:0;overflow:hidden;background:transparent}
+.slide{width:1920px !important;height:1080px !important;transform-origin:0 0}
+</style>
+<script>
+(function(){
+  function fit(){
+    var ss=document.querySelectorAll('.slide');
+    var scale=Math.min(innerWidth/1920,innerHeight/1080);
+    ss.forEach(function(s){s.style.transform='scale('+scale+')'});
+  }
+  addEventListener('load',fit);
+  addEventListener('resize',fit);
+})();
+</script>"""
+
+
+def _apply_thumb_transforms(html_text: str) -> str:
+    """Apply all thumbnail optimizations for consistent scaled rendering.
+
+    1. Strip external font links (avoid render blocking)
+    2. Strip viewport @media blocks (prevent responsive breakpoints in small iframe)
+    3. Replace vw/vh/dvh with fixed px (1920x1080 reference, so clamp() resolves correctly)
+    4. Inject fixed-size CSS + transform scale JS
+    """
+    html_text = _FONT_LINK_RE.sub("", html_text)
+    html_text = re.sub(r'<link[^>]*rel=["\']preconnect["\'][^>]*/?>', '', html_text, flags=re.IGNORECASE)
+    html_text = _VIEWPORT_MEDIA_RE.sub("", html_text)
+    html_text = re.sub(r'([\d.]+)dvh', lambda m: f'{float(m.group(1)) * 10.8:.1f}px', html_text)
+    html_text = re.sub(r'([\d.]+)vw', lambda m: f'{float(m.group(1)) * 19.2:.1f}px', html_text)
+    html_text = re.sub(r'([\d.]+)vh', lambda m: f'{float(m.group(1)) * 10.8:.1f}px', html_text)
+    html_text = html_text.replace("</head>", _THUMB_INJECT + "\n</head>", 1)
+    return html_text
+
 
 async def _serve_file(file_path: str, disposition: str, thumb: int = 0):
     """Unified file serving via FileStore (local / OSS transparent).
@@ -408,10 +451,10 @@ async def _serve_file(file_path: str, disposition: str, thumb: int = 0):
     mime, _ = guess_type(file_path)
     filename = Path(file_path).name
 
-    # HTML + thumb mode: strip external font links to avoid render blocking
+    # HTML + thumb mode: apply full thumbnail transforms
     if thumb and (mime or "").startswith("text/html"):
         html_text = content.decode("utf-8", errors="replace")
-        html_text = _FONT_LINK_RE.sub("", html_text)
+        html_text = _apply_thumb_transforms(html_text)
         return Response(
             content=html_text,
             media_type="text/html; charset=utf-8",
@@ -511,10 +554,10 @@ async def preview_ppt_style(preview_path: str, thumb: int = Query(default=0)):
         resolved = builtin_dir / preview_path
         if not resolved.exists():
             raise HTTPException(status_code=404, detail=f"Preview file not found: {preview_path}")
-        # For thumb mode, strip external font links
+        # For thumb mode, apply full thumbnail transforms
         if thumb:
             html_text = resolved.read_text(encoding="utf-8")
-            html_text = _FONT_LINK_RE.sub("", html_text)
+            html_text = _apply_thumb_transforms(html_text)
             return Response(
                 content=html_text,
                 media_type="text/html; charset=utf-8",
@@ -531,7 +574,7 @@ async def preview_ppt_style(preview_path: str, thumb: int = Query(default=0)):
     content = await file_store.read(preview_path)
     html_text = content.decode("utf-8", errors="replace")
     if thumb:
-        html_text = _FONT_LINK_RE.sub("", html_text)
+        html_text = _apply_thumb_transforms(html_text)
     return Response(
         content=html_text,
         media_type="text/html; charset=utf-8",

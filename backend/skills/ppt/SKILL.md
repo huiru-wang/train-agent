@@ -97,12 +97,11 @@ All form `label` and `options` **must match the user's language**. When the user
 **Question 4 — Source Documents（内容来源）** (header: "Sources")
 - Type: `multiselect`
 - **Only include this field when knowledge-base documents are available.** If no documents, omit this field.
-- Options: List every available document by filename or clear title, plus `全部文档`.
+- Options: List every available document by filename or clear title. **Do NOT include a "全部文档" option** — since this is a multiselect field, users can simply select all documents individually if needed.
 - If the user's message specifies documents, set `recommended: ["<specified docs>"]`.
-- Otherwise, set `recommended: ["全部文档"]`.
-- If the user selects `全部文档`, use every available knowledge-base document.
+- Otherwise, set `recommended` to all available document names (so they are all preselected by default).
 - If the user selects specific documents, use only those as the generation scope.
-- If the user selects both `全部文档` and specific documents, treat `全部文档` as authoritative.
+- If the user selects all documents, use every available knowledge-base document.
 
 **When no documents are available and the user has not provided a topic**, the Topic question's custom input is required. Do not proceed with generation until the user provides a concrete topic, outline, or source content.
 
@@ -255,7 +254,9 @@ save_ppt(
 
 **`title` 命名规则**：标题必须简洁，**不超过 20 个字**。超出时应精简为核心主题（如"并发编程规范精讲"而非"阿里巴巴Java开发手册之并发编程规范精讲"）。
 
-**`title` 去重规则（强制执行）**：调用 `save_ppt` 前，必须检查系统提示中「当前PPT产出」表格已有的标题。如果已存在相同或高度相似的标题，必须在主标题后用中文括号追加区分标识，优先级如下：
+**`title` 去重规则**：调用 `save_ppt` 前，必须检查系统提示中「当前PPT产出」表格已有的标题。
+- 如果不存在相同标题，则不需要关注增加标识
+- 如果已存在相同的标题，必须在主标题后用中文括号追加区分标识，优先级如下：
 1. **风格区分**：追加当前风格中文名，如 `新员工培训（瑞士国际风）`、`新员工培训（墨纸杂志）`
 2. **内容侧重区分**：追加内容差异点，如 `新员工培训（安全篇）`、`并发编程（实战案例版）`
 3. **用途区分**：追加用途标签，如 `产品路演（精简版）`、`内部汇报（详细版）`
