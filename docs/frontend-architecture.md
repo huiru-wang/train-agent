@@ -37,7 +37,7 @@ Train Agent 前端是一个基于 **Next.js (App Router)** 的单页应用，提
 ```
 
 **前端同时与两个后端服务通信**：
-- **FastAPI (:8000)**：通过 REST API 管理工作区、文档上传/删除、任务查询、消息历史、配置更新、PPT 风格管理、风格提取
+- **FastAPI (:8000)**：通过 REST API 管理工作区、文档上传/删除、任务查询、消息历史、配置更新、PPT 风格管理、风格提取、TTS 音色列表、文件下载/预览
 - **LangGraph (:2024)**：通过 `@langchain/react` 的 `useStream` hook 进行流式 Agent 对话
 
 ---
@@ -50,6 +50,7 @@ Train Agent 前端是一个基于 **Next.js (App Router)** 的单页应用，提
 | **UI 库** | React 19 | 最新版 React |
 | **样式** | Tailwind CSS 4 | 原子化 CSS，暗色主题 |
 | **Agent 通信** | @langchain/langgraph-sdk/react (`useStream`) | LangGraph 流式对话 hook |
+| **文件下载** | fetch + Blob URL | 跨域文件下载 |
 | **图标** | lucide-react | 一致的图标风格 |
 | **Markdown** | react-markdown + remark-gfm | GFM 扩展 Markdown 渲染 |
 | **代码高亮** | react-syntax-highlighter (Prism) | oneDark 主题 |
@@ -382,9 +383,9 @@ Agent 调用 clarify_form 工具
 **角色**：TTS 音色选择弹窗
 
 **功能**：
-- 展示可用音色列表（名称、性别、特质描述）
-- 支持在线试听（播放预置音频样本）
-- 选择后持久化到 workspace config
+- 展示可用音色列表（通过 `listVoices()` API 从后端加载，包含名称、性别、特质描述）
+- 支持在线试听（播放预置音频样本 URL）
+- 选择后持久化到 workspace config（存储完整 `voice_info` 结构体）
 
 ---
 
@@ -428,7 +429,7 @@ Agent 调用 clarify_form 工具
 - **预览**：PPT 完成后可打开预览/编辑弹窗
 - **播放**：口播稿完成后与 PPT 联动播放
 - **生成口播稿**：PPT 完成后可触发口播稿生成（通过 onNarrate 回调）
-- **下载**：通过 `GET /api/files/{path}` 下载文件
+- **下载**：通过 `downloadTaskFile(taskId, filename)` 触发浏览器下载（fetch + Blob URL 跨域方案）
 - **删除**：PPT 删除时二次确认（提示将删除关联口播稿和音频）
 - **折叠**：整个面板可折叠为窄条
 - **自动刷新**：每 5 秒轮询任务列表
@@ -518,7 +519,7 @@ Agent 调用 clarify_form 工具
 | `listThreadMessages()` | `GET /api/threads/{id}/messages` | 获取消息历史（turn-based 分页） |
 | `getMessageDetail()` | `GET /api/threads/{id}/messages/{mid}` | 获取单条消息详情 |
 | `listDocuments()` | `GET /api/workspaces/{id}/documents` | 列出文档 |
-| `uploadDocument()` | `POST /api/workspaces/{id}/documents` | 上传文档（FormData） |
+| `uploadDocument()` | `POST /api/workspaces/{id}/documents` | 上传文档（FormData，409 去重） |
 | `deleteDocument()` | `DELETE /api/workspaces/{id}/documents/{doc_id}` | 删除文档 |
 | `listTasks()` | `GET /api/workspaces/{id}/tasks` | 列出任务（顶层+嵌套子任务） |
 | `getTask()` | `GET /api/workspaces/{id}/tasks/{task_id}` | 获取单个任务详情 |
@@ -526,19 +527,23 @@ Agent 调用 clarify_form 工具
 | `saveTaskFile()` | `PUT /api/workspaces/{id}/tasks/{task_id}/file` | 保存 PPT HTML 编辑 |
 | `listPptStyles()` | `GET /api/ppt-styles` | 列出 PPT 风格（系统+自定义） |
 | `deletePptStyle()` | `DELETE /api/ppt-styles/{id}` | 删除自定义风格 |
+| `listVoices()` | `GET /api/voices` | 列出可用 TTS 音色 |
 | `submitStyleExtraction()` | `POST /api/workspaces/{id}/style-extraction` | 上传 PPTX 启动风格提取 |
 | `deleteStyleExtraction()` | `DELETE /api/workspaces/{id}/style-extraction/{task_id}` | 取消并删除风格提取 |
 | `saveStyleFromExtraction()` | `POST /api/style-extraction/{task_id}/save` | 保存提取结果为自定义风格 |
+| `getFileViewUrl()` | 构建 URL | 生成内联预览 URL（支持 thumb） |
+| `downloadTaskFile()` | `GET /api/tasks/{id}/download` | 触发浏览器下载任务文件 |
 | `fetchFileContent()` | 直接 fetch | 获取文件文本内容 |
 
 **类型定义**：
-- `Workspace`：`id, user_id, name, thread_id, ext_data, created_at`
+- `Workspace`：`id, user_id, name, thread_id, ext_data, created_at`（`ext_data` 含 `ppt_style` 风格 ID + `voice_info` 结构体）
 - `Document`：`id, workspace_id, filename, file_type, summary, status, error_message, created_at, updated_at`
 - `DocumentStatus`：`uploaded | processing | parsing | parsed | chunking | indexing | summarizing | ready | error`
 - `Task`：`id, workspace_id, type, title, status, result_data, parent_task_id, children, created_at`
 - `ThreadMessage`：`id, thread_id, workspace_id, message_id, role, type, content, tool_calls, ...`
 - `ThreadMessagesPage`：`messages, next_cursor`
 - `PptStyleInfo`：`id, user_id, category, name, name_en, description, preview_path, created_at`
+- `VoiceInfo`：`id, name, gender, trait, audio_url`
 
 ### 6.2 状态管理
 
@@ -547,7 +552,7 @@ Agent 调用 clarify_form 工具
 | 状态类型 | 管理方式 | 说明 |
 |---------|---------|------|
 | 工作区列表 | `useState` + `useCallback` | 页面级，fetchWorkspaces 刷新 |
-| 文档列表 | `useState` + 轮询 | 面板级，有活跃状态时 1.5s 轮询 |
+| 文档列表 | `useState` + 轮询 | 面板级，有活跃状态时 1.5s 轮询，重复上传 toast 提示 |
 | 任务列表 | `useState` + 轮询 | 面板级，固定 5s 轮询 |
 | 对话流 | `useStream` (LangGraph) | 由 @langchain/langgraph-sdk/react 管理 |
 | 消息历史 | `listThreadMessages` | turn-based 分页，按需加载更多 |
@@ -596,6 +601,7 @@ Agent 调用 clarify_form 工具
 ```
 用户在文档面板点击上传 → 选择文件
   → uploadDocument(workspaceId, file) [FormData]
+  → 重复文档返回 409，前端 toast 提示
   → 文档立即出现在列表（status=uploaded）
   → 轮询开始（1.5s 间隔）
   → 状态变化: uploaded → parsing → parsed → chunking → indexing → summarizing → ready
@@ -718,7 +724,8 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 │    文档上传/删除                      消息历史查询              │
 │    工作区配置更新                     任务文件回写              │
 │    Thread ID 持久化                   PPT 风格管理             │
-│    风格提取提交/轮询/保存                                     │
+│    风格提取提交/轮询/保存              TTS 音色列表             │
+│    文件下载/内联预览                                         │
 │                                                             │
 │  assistant.tsx ── Stream (useStream) → LangGraph (:2024)    │
 │    (via @langchain/langgraph-sdk/react)                      │
@@ -765,6 +772,8 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 - **弹窗式风格提取**：步骤进度可视化 + 完成后可预览 + 一键保存
 - **胶囊命令**：ExternalCommand 以胶囊 UI 注入聊天输入框，降低技能触发门槛
 - **分类风格选择**：PPT 风格按深色/浅色/自定义分类展示，支持预览和删除
+- **文档去重**：上传时后端基于文件名 + 内容哈希检测重复，409 状态码前端 toast 提示
+- **文件下载跨域方案**：通过 fetch + Blob URL + 临时 `<a>` 元素实现跨域文件下载，避免浏览器同源策略限制
 - **响应式**：工作区列表 1-3 列自适应
 
 ---
@@ -785,3 +794,6 @@ Agent 调用 save_ppt → 后端创建 Task + 保存文件
 12. **可拖拽三栏布局**：使用原生 DOM 事件实现拖拽，避免引入额外布局库
 13. **PPT 风格 API 化**：风格列表从后端 API 动态加载（系统预设 + 用户自定义），而非前端硬编码
 14. **风格提取工作流前端可视化**：通过轮询 Task 进度，将后端异步工作流的每个步骤实时展示给用户
+15. **TTS 音色 API 化**：音色列表从后端 `GET /api/voices` 接口加载，不在前端硬编码
+16. **文件下载抽象**：前端通过 `downloadTaskFile(taskId)` 下载，后端解析文件路径，存储细节对前端透明
+17. **文档去重**：上传时后端检测重复（文件名 + 内容哈希），409 状态码前端友好提示
