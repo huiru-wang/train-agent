@@ -1,15 +1,32 @@
 @import "tailwindcss";
 
-:root {
-  --background: #1a1a1a;
-  --foreground: #e5e5e5;
-  --muted: #2a2a2a;
-  --muted-foreground: #a3a3a3;
-  --border: #333333;
-  --accent: #d4a574;
-  --accent-foreground: #1a1a1a;
+/* 暖光主题（默认） */
+:root,
+[data-theme="light"] {
+  --background: #fafaf8;
+  --foreground: #1c1c1c;
+  --muted: #f0eeeb;
+  --muted-foreground: #6b6b6b;
+  --border: #e2e0dc;
+  --accent: #b8763e;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --ring: #b8763e;
+  --prose-tr-even: rgba(0, 0, 0, 0.02);
+}
+
+/* 午夜主题 */
+[data-theme="dark"] {
+  --background: #111111;
+  --foreground: #eeeeee;
+  --muted: #1c1c1c;
+  --muted-foreground: #888888;
+  --border: #2a2a2a;
+  --accent: #ffffff;
+  --accent-foreground: #111111;
   --destructive: #ef4444;
-  --ring: #d4a574;
+  --ring: #ffffff;
+  --prose-tr-even: rgba(255, 255, 255, 0.02);
 }
 
 @theme inline {
@@ -158,7 +175,7 @@ body {
 }
 
 .prose tr:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--prose-tr-even);
 }
 
 .prose hr {

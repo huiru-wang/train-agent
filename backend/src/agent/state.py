@@ -1,7 +1,7 @@
 from langchain.agents import AgentState
 
 
-class TrainAgentState(AgentState):
+class MainAgentState(AgentState):
     """Extended agent state with workspace context."""
     workspace_id: str
     ppt_style: str  # 当前选中的PPT风格

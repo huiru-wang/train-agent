@@ -1,5 +1,5 @@
 [project]
-name = "train-agent"
+name = "rumi-ai"
 version = "0.1.0"
 description = "Training domain Agent with RAG and skills"
 requires-python = ">=3.12"

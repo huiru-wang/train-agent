@@ -3,7 +3,7 @@ import logging
 
 from langchain.tools import tool, ToolRuntime
 
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
 from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def create_get_style_template_tool(db: Database):
     @tool
     async def get_style_template(
-        runtime: ToolRuntime[TrainAgentState],
+        runtime: ToolRuntime[MainAgentState],
         **kwargs,
     ) -> str:
         """获取当前配置的 PPT 风格模版完整内容（风格描述 + 资源清单）。

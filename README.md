@@ -1,6 +1,6 @@
-# Train Agent
+# RumiAI
 
-Train Agent 是一个 AI 培训助手，帮助用户基于上传的培训文档进行知识问答、PPT 生成、口播稿生成、TTS 音频合成和 PPT 风格提取。
+RumiAI 是一个文档驱动的 AI 工作台，帮助用户基于上传的文档进行知识问答、PPT 生成、口播稿生成、TTS 音频合成和 PPT 风格提取。
 
 ## 架构概览
 
@@ -185,7 +185,7 @@ cd frontend && pnpm lint && pnpm build
 ## 项目结构
 
 ```
-train-agent/
+rumi-ai/
 ├── backend/
 │   ├── skills/             # Agent 技能（ppt、narration）
 │   ├── src/

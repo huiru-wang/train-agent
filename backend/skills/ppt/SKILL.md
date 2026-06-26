@@ -87,7 +87,7 @@ All form `label` and `options` **must match the user's language**. When the user
 - Type: `select`
 - Options: `产品路演` / `教学培训` / `会议演讲` / `内部汇报`
 - If the user's message clearly states a purpose, set `recommended: ["<matched option>"]`.
-- Otherwise, recommend based on Topic context (e.g., training-related topic → "教学培训").
+- Otherwise, recommend based on Topic context (e.g., product-related topic → "产品路演", teaching-related topic → "教学培训").
 
 **Question 3 — Length（页数）** (header: "Length")
 - Type: `select`
@@ -292,8 +292,8 @@ save_ppt(
 **`title` 去重规则**：调用 `save_ppt` 前，必须检查系统提示中「当前PPT产出」表格已有的标题。
 - 如果不存在相同标题，则不需要关注增加标识
 - 如果已存在相同的标题，必须在主标题后用中文括号追加区分标识，优先级如下：
-1. **风格区分**：追加当前风格中文名，如 `新员工培训（瑞士国际风）`、`新员工培训（墨纸杂志）`
-2. **内容侧重区分**：追加内容差异点，如 `新员工培训（安全篇）`、`并发编程（实战案例版）`
+1. **风格区分**：追加当前风格中文名，如 `产品规划（瑞士国际风）`、`产品规划（墨纸杂志）`
+2. **内容侧重区分**：追加内容差异点，如 `数据安全（管理篇）`、`并发编程（实战案例版）`
 3. **用途区分**：追加用途标签，如 `产品路演（精简版）`、`内部汇报（详细版）`
 
 确保同一工作区内每个 PPT 标题唯一可辨识。如果没有重复风险，则不需要追加括号后缀。
@@ -302,7 +302,7 @@ The `outline` parameter must be a JSON string matching this schema:
 ```json
 {
   "title": "PPT主题",
-  "topic": "PPT的核心主题（简短，如：并发编程规范、消防安全培训）",
+  "topic": "PPT的核心主题（简短，如：并发编程规范、数据安全管理）",
   "summary": "PPT的全局摘要（2-3句话概括整个PPT的核心内容和目标）",
   "audience": "目标受众",
   "purpose": "用途",
@@ -321,7 +321,7 @@ The `outline` parameter must be a JSON string matching this schema:
 }
 ```
 
-**`topic`** 是 PPT 的核心主题，简短明了（如"并发编程规范"、"新员工入职安全培训"）。
+**`topic`** 是 PPT 的核心主题，简短明了（如"并发编程规范"、"数据安全管理"）。
 **`summary`** 用 2-3 句话概括整个 PPT 的核心内容、目标和价值，用于后续口播稿生成和系统提示展示。
 
 This outline is used later for narration generation and RAG retrieval.

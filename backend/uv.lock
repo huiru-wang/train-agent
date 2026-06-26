@@ -3062,6 +3062,74 @@ wheels = [
 ]
 
 [[package]]
+name = "rumi-ai"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "chromadb" },
+    { name = "dashscope" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "langchain" },
+    { name = "langchain-community" },
+    { name = "langchain-deepseek" },
+    { name = "langchain-openai" },
+    { name = "langchain-text-splitters" },
+    { name = "langgraph" },
+    { name = "langgraph-api" },
+    { name = "langgraph-cli" },
+    { name = "pillow" },
+    { name = "pymupdf" },
+    { name = "python-docx" },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
+    { name = "python-pptx" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+oss = [
+    { name = "oss2" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosqlite", specifier = ">=0.21" },
+    { name = "chromadb", specifier = ">=1.0" },
+    { name = "dashscope", specifier = ">=1.20" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "langchain", specifier = ">=1.2.3" },
+    { name = "langchain-community", specifier = ">=0.3" },
+    { name = "langchain-deepseek", specifier = ">=1.1.0" },
+    { name = "langchain-openai", specifier = ">=0.3" },
+    { name = "langchain-text-splitters", specifier = ">=0.3" },
+    { name = "langgraph", specifier = ">=1.1.9" },
+    { name = "langgraph-api", specifier = ">=0.10.0" },
+    { name = "langgraph-cli", specifier = ">=0.4.27" },
+    { name = "oss2", marker = "extra == 'oss'", specifier = ">=2.18" },
+    { name = "pillow", specifier = ">=10.0" },
+    { name = "pymupdf", specifier = ">=1.25" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25" },
+    { name = "python-docx", specifier = ">=1.1" },
+    { name = "python-dotenv", specifier = ">=1.1" },
+    { name = "python-multipart", specifier = ">=0.0.20" },
+    { name = "python-pptx", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
+    { name = "uvicorn", specifier = ">=0.34" },
+]
+provides-extras = ["oss", "dev"]
+
+[[package]]
 name = "setuptools"
 version = "82.0.1"
 source = { registry = "https://pypi.org/simple" }
@@ -3239,74 +3307,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd
 wheels = [
     { url = "https://files.pythonhosted.org/packages/16/e1/3079a9ff9b8e11b846c6ac5c8b5bfb7ff225eee721825310c91b3b50304f/tqdm-4.67.3-py3-none-any.whl", hash = "sha256:ee1e4c0e59148062281c49d80b25b67771a127c85fc9676d3be5f243206826bf", size = 78374 },
 ]
-
-[[package]]
-name = "train-agent"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aiosqlite" },
-    { name = "chromadb" },
-    { name = "dashscope" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "langchain" },
-    { name = "langchain-community" },
-    { name = "langchain-deepseek" },
-    { name = "langchain-openai" },
-    { name = "langchain-text-splitters" },
-    { name = "langgraph" },
-    { name = "langgraph-api" },
-    { name = "langgraph-cli" },
-    { name = "pillow" },
-    { name = "pymupdf" },
-    { name = "python-docx" },
-    { name = "python-dotenv" },
-    { name = "python-multipart" },
-    { name = "python-pptx" },
-    { name = "pyyaml" },
-    { name = "uvicorn" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-oss = [
-    { name = "oss2" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosqlite", specifier = ">=0.21" },
-    { name = "chromadb", specifier = ">=1.0" },
-    { name = "dashscope", specifier = ">=1.20" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "httpx", specifier = ">=0.28" },
-    { name = "langchain", specifier = ">=1.2.3" },
-    { name = "langchain-community", specifier = ">=0.3" },
-    { name = "langchain-deepseek", specifier = ">=1.1.0" },
-    { name = "langchain-openai", specifier = ">=0.3" },
-    { name = "langchain-text-splitters", specifier = ">=0.3" },
-    { name = "langgraph", specifier = ">=1.1.9" },
-    { name = "langgraph-api", specifier = ">=0.10.0" },
-    { name = "langgraph-cli", specifier = ">=0.4.27" },
-    { name = "oss2", marker = "extra == 'oss'", specifier = ">=2.18" },
-    { name = "pillow", specifier = ">=10.0" },
-    { name = "pymupdf", specifier = ">=1.25" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25" },
-    { name = "python-docx", specifier = ">=1.1" },
-    { name = "python-dotenv", specifier = ">=1.1" },
-    { name = "python-multipart", specifier = ">=0.0.20" },
-    { name = "python-pptx", specifier = ">=1.0" },
-    { name = "pyyaml", specifier = ">=6.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.11" },
-    { name = "uvicorn", specifier = ">=0.34" },
-]
-provides-extras = ["oss", "dev"]
 
 [[package]]
 name = "truststore"

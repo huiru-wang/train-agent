@@ -3,7 +3,7 @@ import logging
 
 from langchain.tools import tool, ToolRuntime
 
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
 from src.storage.database import Database
 
 logger = logging.getLogger(__name__)
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def create_get_ppt_detail_tool(db: Database):
     @tool
     async def get_ppt_detail(
-        runtime: ToolRuntime[TrainAgentState],
+        runtime: ToolRuntime[MainAgentState],
         task_id: str,
         **kwargs,
     ) -> str:

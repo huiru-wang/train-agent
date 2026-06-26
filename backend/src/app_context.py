@@ -21,7 +21,7 @@ class AppContext:
     def from_env(cls) -> "AppContext":
         """Create an AppContext from environment variables."""
         data_dir = os.getenv("DATA_DIR", "./data")
-        db = Database(f"{data_dir}/train_agent.db")
+        db = Database(f"{data_dir}/rumi_ai.db")
         provider = cls._create_storage_provider(data_dir)
         return cls(
             db=db,

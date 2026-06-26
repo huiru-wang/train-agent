@@ -1,12 +1,12 @@
-# Train Agent 前端架构设计文档
+# RumiAI 前端架构设计文档
 
-> 本文档面向 AI 及开发者，旨在帮助快速理解 Train Agent 前端的整体设计、模块职责与交互流程。
+> 本文档面向 AI 及开发者，旨在帮助快速理解 RumiAI 前端的整体设计、模块职责与交互流程。
 
 ---
 
 ## 一、系统总览
 
-Train Agent 前端是一个基于 **Next.js (App Router)** 的单页应用，提供培训知识管理和 AI 对话交互界面。
+RumiAI 前端是一个基于 **Next.js (App Router)** 的单页应用，提供文档知识管理和 AI 对话交互界面。
 
 ### 核心交互模型
 
@@ -136,7 +136,7 @@ frontend/
 
 **用户 ID 策略**（`lib/user.ts`）：
 - 首次访问时生成 `crypto.randomUUID()` 并存入 `localStorage`
-- 后续访问复用，Key 为 `train-agent-user-id`
+- 后续访问复用，Key 为 `rumi-ai-user-id`
 - SSR 场景返回 `"anonymous"` 兜底
 
 ### 4.2 工作区详情页 (`app/workspace/[id]/page.tsx`)
@@ -248,7 +248,7 @@ frontend/
    ```typescript
    useStream({
      apiUrl: "http://localhost:2024",
-     assistantId: "train_agent",
+     assistantId: "main_agent",
      threadId,
    })
    ```

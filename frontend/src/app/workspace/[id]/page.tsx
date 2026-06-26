@@ -12,6 +12,7 @@ import { ConfigPanel } from "@/components/config/config-panel";
 import { PPTPlayerDialog } from "@/components/player/ppt-player-dialog";
 import { PPTPreviewDialog } from "@/components/player/ppt-preview-dialog";
 import { StyleExtractionDialog } from "@/components/config/style-extraction-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { ExternalCommand } from "@/components/chat/assistant";
 
 export default function WorkspacePage() {
@@ -131,6 +132,9 @@ export default function WorkspacePage() {
           <span className="text-sm font-medium text-foreground">
             {workspace.name}
           </span>
+        </div>
+        <div className="ml-auto">
+          <ThemeToggle />
         </div>
       </header>
 

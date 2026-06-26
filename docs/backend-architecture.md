@@ -1,12 +1,12 @@
-# Train Agent 后端架构设计文档
+# RumiAI 后端架构设计文档
 
-> 本文档面向 AI 及开发者，旨在帮助快速理解 Train Agent 后端的整体设计、模块职责与数据流转。
+> 本文档面向 AI 及开发者，旨在帮助快速理解 RumiAI 后端的整体设计、模块职责与数据流转。
 
 ---
 
 ## 一、系统总览
 
-Train Agent 后端由 **两个独立进程** 组成，共享同一份代码库：
+RumiAI 后端由 **两个独立进程** 组成，共享同一份代码库：
 
 | 进程 | 框架 | 端口 | 职责 |
 |------|------|-----:|------|
@@ -77,7 +77,7 @@ backend/
 ├── pyproject.toml           # Python 项目配置 + 依赖声明
 ├── .env                     # 环境变量（不提交）
 ├── data/                    # 运行时数据目录（不提交）
-│   ├── train_agent.db       #   SQLite 数据库文件
+│   ├── rumi_ai.db       #   SQLite 数据库文件
 │   ├── chroma/              #   ChromaDB 持久化目录
 │   └── files/               #   用户上传文件 + Agent 产出文件
 │       └── {workspace_id}/  #     按工作区隔离
@@ -233,7 +233,7 @@ style_extract_manager = StyleExtractManager(db=db, file_store=file_store)
 
 **文件**: `src/agent/graph.py`, `src/agent/state.py`, `src/agent/message_history.py`
 
-这是 Train Agent 的核心智能层，基于 **LangChain Agent + LangGraph** 构建。
+这是 RumiAI 的核心智能层，基于 **LangChain Agent + LangGraph** 构建。
 
 #### 4.2.1 Agent 图 (`graph.py`)
 
@@ -248,14 +248,14 @@ style_extract_manager = StyleExtractManager(db=db, file_store=file_store)
 **核心组件**：
 
 - **Model**: `ChatOpenAI`，通过 OpenAI 兼容接口调用 DeepSeek（`MAIN_MODEL`），开启 `streaming` 和 `enable_thinking`
-- **State**: `TrainAgentState`，继承 `AgentState`，扩展 workspace/config 字段
+- **State**: `MainAgentState`，继承 `AgentState`，扩展 workspace/config 字段
 - **Tools**: 8 个注册工具（见 4.3 节）
 - **Middlewares**: 见 4.2.4 节
 
 #### 4.2.2 Agent 状态 (`state.py`)
 
 ```python
-class TrainAgentState(AgentState):
+class MainAgentState(AgentState):
     workspace_id: str           # 当前工作区 ID
     ppt_style: str              # PPT 风格（如 "swiss-modern"）
     voice_id: str               # TTS 音色 ID（如 "Cherry"）
@@ -266,12 +266,12 @@ class TrainAgentState(AgentState):
 
 #### 4.2.3 系统提示词 (`prompt_manager.py`)
 
-`PromptManager` 类定义 Agent 的角色为 **企业培训专家**，系统提示词从 `managers/prompts/system_prompt.md` 文件加载，核心约束包括：
+`PromptManager` 类定义 Agent 的角色为 **文档驱动的 AI 工作台助手**，系统提示词从 `managers/prompts/system_prompt.md` 文件加载，核心约束包括：
 - 结构化 Markdown 输出
 - 基于文档事实，禁止捏造
 - 引用规范（`{{ref:文档名|章节}}`）
 - 技能使用（`/ppt`、`/narrate` 命令触发）
-- 场景限定（仅处理培训相关请求）
+- 文档边界（回答基于工作区文档）
 - 动态注入当前 PPT 产出元信息（含 topic/summary）
 
 此外，`PromptManager` 还提供风格提取相关的提示词构建方法（模板文件位于 `managers/prompts/`）：
@@ -303,7 +303,7 @@ class TrainAgentState(AgentState):
 - 通过 `MessageHistoryMiddleware` 在 Agent 执行前后触发
 
 **长对话摘要**：
-- `TrainAgentSummarizationMiddleware` 监控消息 token 总量
+- `SummarizationMiddleware` 监控消息 token 总量
 - 超过阈值（40000 tokens）时，保留最近 8 条消息，将更早的消息压缩为摘要
 - 使用独立的 LLM 实例生成摘要（`MAIN_MODEL`）
 
@@ -600,14 +600,14 @@ skills/
   → LLM 推理 → 决定调用 rag_search
   → rag_search: ChromaDB 检索 → 返回带位置信息的片段
   → LLM 基于检索结果生成带引用标记的回答
-  → TrainAgentSummarizationMiddleware: 检查是否需要摘要压缩
+  → SummarizationMiddleware: 检查是否需要摘要压缩
 前端 ← 流式接收 AI 回复
 ```
 
 ### 5.3 PPT 生成
 
 ```
-前端 → 用户发送 "/ppt 新员工培训"
+前端 → 用户发送 "/ppt 产品规划"
   → LLM 识别 /ppt 命令 → 调用 load_skill("html-ppt")
   → 获取 PPT 技能完整提示 + linked_files 列表
   → (可选) 调用 clarify_form → 前端展示表单 → 用户填写 → resume
@@ -701,7 +701,7 @@ skills/
   "python_version": "3.12",
   "dependencies": ["."],
   "graphs": {
-    "train_agent": "src.agent.graph:graph"
+    "main_agent": "src.agent.graph:graph"
   },
   "env": ".env"
 }

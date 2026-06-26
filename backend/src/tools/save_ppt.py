@@ -4,7 +4,8 @@ import re
 
 from langchain.tools import tool, ToolRuntime
 
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
+from src.limits import MAX_PPT_TASKS_PER_WORKSPACE
 from src.storage.database import Database
 from src.storage.file_store import FileStore
 
@@ -41,6 +42,14 @@ async def save_ppt_artifact(
     outline: str = "",
 ) -> tuple[dict, str]:
     """Save a PPT artifact to the file store and create a task record in DB."""
+    # Quota check: max PPT tasks per workspace
+    ppt_count = await db.count_tasks_by_type(workspace_id, "ppt")
+    if ppt_count >= MAX_PPT_TASKS_PER_WORKSPACE:
+        return (
+            {},
+            f"保存失败：每个工作区最多生成 {MAX_PPT_TASKS_PER_WORKSPACE} 个PPT任务，当前已有 {ppt_count} 个。请删除旧任务后重试。",
+        )
+
     # Always derive filename from title (Chinese) to ensure readable download names.
     # The LLM may pass an English filename — ignore it in favor of the user-visible title.
     safe_title = title.replace(" ", "_").replace("/", "_").replace("\\", "_")
@@ -112,7 +121,7 @@ async def save_ppt_artifact(
 def create_save_ppt_tool(db: Database, file_store: FileStore):
     @tool
     async def save_ppt(
-        runtime: ToolRuntime[TrainAgentState],
+        runtime: ToolRuntime[MainAgentState],
         title: str,
         content: str,
         filename: str = "",
@@ -125,7 +134,7 @@ def create_save_ppt_tool(db: Database, file_store: FileStore):
         你必须在完成 PPT 内容后调用此工具，否则用户无法获取结果。
 
         Args:
-            title: PPT 标题，如"新员工消防培训"
+            title: PPT 标题
             content: 完整的自包含 HTML 内容
             filename: 文件名（可选，默认根据 title 自动生成 .html）
             outline: 结构化大纲 JSON 字符串，包含 slides 数组（每个 slide 含 number/title/key_points/keywords）

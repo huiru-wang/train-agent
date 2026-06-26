@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute raw SQL against the train-agent SQLite database.
+"""Execute raw SQL against the RumiAI SQLite database.
 
 Usage:
     python scripts/run_sql.py "SELECT * FROM workspace LIMIT 5;"
@@ -11,7 +11,7 @@ import os
 import sys
 import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "backend", "data", "train_agent.db")
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "backend", "data", "rumi_ai.db")
 
 
 def main():

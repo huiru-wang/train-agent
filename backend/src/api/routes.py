@@ -5,13 +5,41 @@ from mimetypes import guess_type
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.api.deps import db, doc_service, file_store, skill_manager, style_extract_manager, vector_store
+from src.exceptions import (
+    BizException,
+    success_response,
+    ERR_WORKSPACE_QUOTA,
+    ERR_WORKSPACE_NAME_EXISTS,
+    ERR_WORKSPACE_NOT_FOUND,
+    ERR_DOCUMENT_QUOTA,
+    ERR_DOCUMENT_DUPLICATE_NAME,
+    ERR_DOCUMENT_DUPLICATE_HASH,
+    ERR_TASK_NOT_FOUND,
+    ERR_TASK_FILE_NOT_FOUND,
+    ERR_STYLE_EXTRACTION_QUOTA,
+    ERR_STYLE_EXTRACTION_FORMAT,
+    ERR_TASK_NOT_COMPLETED,
+    ERR_STYLE_ALREADY_SAVED,
+    ERR_CUSTOM_STYLE_QUOTA,
+    ERR_STYLE_NOT_FOUND,
+    ERR_SYSTEM_STYLE_DELETE,
+    ERR_FILE_NOT_FOUND,
+    ERR_TASK_NO_FILE,
+    ERR_MESSAGE_NOT_FOUND,
+)
+from src.limits import (
+    MAX_WORKSPACES_PER_USER,
+    MAX_DOCUMENTS_PER_WORKSPACE,
+    MAX_STYLE_EXTRACTION_TASKS_PER_WORKSPACE,
+    MAX_CUSTOM_STYLES_PER_USER,
+)
 from src.managers.doc_manager import DuplicateDocumentError
 from src.storage.seeds import _BUILTIN_VOICES
 
@@ -24,13 +52,21 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-app = FastAPI(title="Train Agent API")
+app = FastAPI(title="RumiAI API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(BizException)
+async def biz_exception_handler(request: Request, exc: BizException):
+    return JSONResponse(
+        status_code=200,
+        content={"data": None, "code": exc.code, "message": exc.message},
+    )
 
 
 @app.on_event("startup")
@@ -51,18 +87,22 @@ class CreateWorkspaceRequest(BaseModel):
 @app.post("/api/workspaces")
 async def create_workspace(req: CreateWorkspaceRequest):
     logger.info("[API] POST /api/workspaces user_id=%s name=%s", req.user_id, req.name)
+    count = await db.count_workspaces(req.user_id)
+    if count >= MAX_WORKSPACES_PER_USER:
+        raise BizException(ERR_WORKSPACE_QUOTA, f"每个用户最多创建 {MAX_WORKSPACES_PER_USER} 个工作区，当前已有 {count} 个。")
     try:
         result = await db.create_workspace(user_id=req.user_id, name=req.name)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise BizException(ERR_WORKSPACE_NAME_EXISTS, "工作区名称已存在") from exc
     logger.info("[API] workspace created: id=%s", result["id"])
-    return result
+    return success_response(result)
 
 
 @app.get("/api/workspaces")
 async def list_workspaces(user_id: str):
     logger.info("[API] GET /api/workspaces user_id=%s", user_id)
-    return await db.list_workspaces(user_id=user_id)
+    data = await db.list_workspaces(user_id=user_id)
+    return success_response(data)
 
 
 @app.get("/api/workspaces/{workspace_id}")
@@ -70,10 +110,8 @@ async def get_workspace(workspace_id: str):
     logger.info("[API] GET /api/workspaces/%s", workspace_id)
     workspace = await db.get_workspace(workspace_id)
     if not workspace:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Workspace not found")
-    return workspace
+        raise BizException(ERR_WORKSPACE_NOT_FOUND, "工作区不存在")
+    return success_response(workspace)
 
 
 class UpdateThreadRequest(BaseModel):
@@ -93,7 +131,7 @@ class SaveTaskFileRequest(BaseModel):
 async def update_workspace_thread(workspace_id: str, req: UpdateThreadRequest):
     logger.info("[API] PATCH /api/workspaces/%s/thread thread_id=%s", workspace_id, req.thread_id)
     await db.update_workspace_thread_id(workspace_id, req.thread_id)
-    return {"ok": True}
+    return success_response(None)
 
 
 @app.patch("/api/workspaces/{workspace_id}/config")
@@ -102,8 +140,8 @@ async def update_workspace_config(workspace_id: str, req: UpdateConfigRequest):
     try:
         ext_data = await db.update_workspace_ext_data(workspace_id, req.key, req.value)
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"ok": True, "ext_data": ext_data}
+        raise BizException(ERR_WORKSPACE_NOT_FOUND, "工作区不存在") from exc
+    return success_response(ext_data)
 
 
 @app.get("/api/threads/{thread_id}/messages")
@@ -118,7 +156,8 @@ async def list_thread_messages(
         limit,
         before,
     )
-    return await db.list_thread_messages(thread_id, limit=limit, before=before)
+    data = await db.list_thread_messages(thread_id, limit=limit, before=before)
+    return success_response(data)
 
 
 @app.get("/api/threads/{thread_id}/messages/{message_id}")
@@ -130,18 +169,16 @@ async def get_message_detail(thread_id: str, message_id: str):
     )
     msg = await db.get_message_by_id(message_id, thread_id)
     if not msg:
-        raise HTTPException(status_code=404, detail="Message not found")
-    return msg
+        raise BizException(ERR_MESSAGE_NOT_FOUND, "消息不存在")
+    return success_response(msg)
 
 
 @app.delete("/api/workspaces/{workspace_id}")
 async def delete_workspace(workspace_id: str):
     logger.info("[API] DELETE /api/workspaces/%s", workspace_id)
-    # Delete all documents, vector store, and files
     await doc_service.delete_workspace(workspace_id)
-    # Delete workspace record from database
     await db.delete_workspace(workspace_id)
-    return {"ok": True}
+    return success_response(None)
 
 
 # --- Documents ---
@@ -154,6 +191,9 @@ async def upload_document(
     file: UploadFile = File(...),
 ):
     logger.info("[API] POST /api/workspaces/%s/documents filename=%s", workspace_id, file.filename)
+    doc_count = await db.count_documents(workspace_id)
+    if doc_count >= MAX_DOCUMENTS_PER_WORKSPACE:
+        raise BizException(ERR_DOCUMENT_QUOTA, f"每个工作区最多上传 {MAX_DOCUMENTS_PER_WORKSPACE} 个文档，当前已有 {doc_count} 个。")
     content = await file.read()
     logger.info("[API] file read: %d bytes", len(content))
     try:
@@ -164,26 +204,26 @@ async def upload_document(
         )
     except DuplicateDocumentError as exc:
         logger.info("[API] duplicate document rejected: %s", exc)
-        raise HTTPException(
-            status_code=409,
-            detail={"message": str(exc), "existing_doc_id": exc.existing_doc_id},
-        ) from exc
+        if exc.existing_doc_id and "内容完全相同" in str(exc):
+            raise BizException(ERR_DOCUMENT_DUPLICATE_HASH, str(exc)) from exc
+        raise BizException(ERR_DOCUMENT_DUPLICATE_NAME, str(exc)) from exc
     background_tasks.add_task(doc_service.process_document, doc["id"])
     logger.info("[API] upload result: id=%s status=%s", doc["id"], doc["status"])
-    return doc
+    return success_response(doc)
 
 
 @app.get("/api/workspaces/{workspace_id}/documents")
 async def list_documents(workspace_id: str):
     logger.info("[API] GET /api/workspaces/%s/documents", workspace_id)
-    return await db.list_documents(workspace_id)
+    data = await db.list_documents(workspace_id)
+    return success_response(data)
 
 
 @app.delete("/api/workspaces/{workspace_id}/documents/{doc_id}")
 async def delete_document(workspace_id: str, doc_id: str):
     logger.info("[API] DELETE /api/workspaces/%s/documents/%s", workspace_id, doc_id)
     await doc_service.delete_document(workspace_id, doc_id)
-    return {"ok": True}
+    return success_response(None)
 
 
 # --- Tasks ---
@@ -192,50 +232,44 @@ async def delete_document(workspace_id: str, doc_id: str):
 @app.get("/api/workspaces/{workspace_id}/tasks")
 async def list_tasks(workspace_id: str):
     logger.info("[API] GET /api/workspaces/%s/tasks", workspace_id)
-    return await db.list_tasks(workspace_id)
+    data = await db.list_tasks(workspace_id)
+    return success_response(data)
 
 
 @app.delete("/api/workspaces/{workspace_id}/tasks/{task_id}")
 async def delete_task(workspace_id: str, task_id: str):
     logger.info("[API] DELETE /api/workspaces/%s/tasks/%s", workspace_id, task_id)
 
-    # Get task info before deleting (for file cleanup)
     task = await db.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise BizException(ERR_TASK_NOT_FOUND, "任务不存在")
 
-    # Cascade delete from DB (returns all deleted task IDs)
     deleted_ids = await db.delete_task(task_id)
 
     # --- File cleanup (delegated to FileStore for local/OSS transparency) ---
     if task["type"] == "ppt":
-        # PPT: remove entire ppt/{ppt_task_id}/ directory
         await file_store.delete_ppt_task_dir(workspace_id, task_id)
         logger.info("[API] removed PPT output directory for task: %s", task_id)
     elif task["type"] == "narration":
-        # Narration: delete individual files from result_data
         result_data = {}
         if task.get("result_data"):
             try:
                 result_data = json.loads(task["result_data"])
             except (json.JSONDecodeError, TypeError):
                 pass
-        # Delete audio files
         for slide in result_data.get("slides", []):
             audio_path = slide.get("audio_path")
             if audio_path:
                 await file_store.delete_async(audio_path)
-        # Delete narration text file
         text_file_path = result_data.get("text_file_path")
         if text_file_path:
             await file_store.delete_async(text_file_path)
         logger.info("[API] cleaned narration files for task: %s", task_id)
     elif task["type"] == "ppt_style_extraction":
-        # Style extraction: remove style/{task_id}/ directory
         await file_store.delete_style_task_dir(workspace_id, task_id)
         logger.info("[API] removed style extraction output directory for task: %s", task_id)
 
-    return {"ok": True, "deleted_ids": deleted_ids}
+    return success_response({"deleted_ids": deleted_ids})
 
 
 @app.put("/api/workspaces/{workspace_id}/tasks/{task_id}/file")
@@ -244,7 +278,7 @@ async def save_task_file(workspace_id: str, task_id: str, req: SaveTaskFileReque
     logger.info("[API] PUT /api/workspaces/%s/tasks/%s/file content_len=%d", workspace_id, task_id, len(req.content))
     task = await db.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise BizException(ERR_TASK_NOT_FOUND, "任务不存在")
     result_data = {}
     if task.get("result_data"):
         try:
@@ -253,12 +287,12 @@ async def save_task_file(workspace_id: str, task_id: str, req: SaveTaskFileReque
             pass
     file_path = result_data.get("file_path", "")
     if not file_path:
-        raise HTTPException(status_code=404, detail="File path not found in task result_data")
+        raise BizException(ERR_TASK_FILE_NOT_FOUND, "任务文件不存在")
     if not await file_store.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found on disk")
+        raise BizException(ERR_TASK_FILE_NOT_FOUND, "任务文件不存在")
     await file_store.write_text(file_path, req.content)
     logger.info("[API] saved task file: %s (%d bytes)", file_path, len(req.content))
-    return {"ok": True}
+    return success_response(None)
 
 
 # --- Style Extraction ---
@@ -273,11 +307,12 @@ async def submit_style_extraction(
     """Upload a PPTX file and start style extraction workflow."""
     logger.info("[API] POST /api/workspaces/%s/style-extraction filename=%s", workspace_id, file.filename)
     if not file.filename or not file.filename.lower().endswith(".pptx"):
-        raise HTTPException(status_code=400, detail="Only .pptx files are accepted")
+        raise BizException(ERR_STYLE_EXTRACTION_FORMAT, "仅支持 .pptx 文件")
+    style_task_count = await db.count_tasks_by_type(workspace_id, "ppt_style_extraction")
+    if style_task_count >= MAX_STYLE_EXTRACTION_TASKS_PER_WORKSPACE:
+        raise BizException(ERR_STYLE_EXTRACTION_QUOTA, f"每个工作区最多创建 {MAX_STYLE_EXTRACTION_TASKS_PER_WORKSPACE} 个风格提取任务，当前已有 {style_task_count} 个。")
 
     content = await file.read()
-    # PPTX is a temporary file — do NOT save to storage.
-    # It will be written to a temp dir inside run_extraction and cleaned up automatically.
 
     task = await db.create_task(
         workspace_id=workspace_id,
@@ -290,7 +325,7 @@ async def submit_style_extraction(
         style_extract_manager.run_extraction,
         task["id"], workspace_id, content, file.filename,
     )
-    return task
+    return success_response(task)
 
 
 @app.get("/api/workspaces/{workspace_id}/tasks/{task_id}")
@@ -299,8 +334,8 @@ async def get_task(workspace_id: str, task_id: str):
     logger.info("[API] GET /api/workspaces/%s/tasks/%s", workspace_id, task_id)
     task = await db.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task
+        raise BizException(ERR_TASK_NOT_FOUND, "任务不存在")
+    return success_response(task)
 
 
 @app.delete("/api/workspaces/{workspace_id}/style-extraction/{task_id}")
@@ -308,20 +343,18 @@ async def delete_style_extraction(workspace_id: str, task_id: str):
     """Cancel running extraction and delete the task."""
     logger.info("[API] DELETE /api/workspaces/%s/style-extraction/%s", workspace_id, task_id)
 
-    # Cancel if running
     await style_extract_manager.cancel_extraction(task_id)
 
-    # Use the generic delete_task logic (which handles file cleanup for ppt_style_extraction)
     task = await db.get_task(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise BizException(ERR_TASK_NOT_FOUND, "任务不存在")
 
     deleted_ids = await db.delete_task(task_id)
 
     await file_store.delete_style_task_dir(workspace_id, task_id)
     logger.info("[API] removed style extraction output directory for task: %s", task_id)
 
-    return {"ok": True, "deleted_ids": deleted_ids}
+    return success_response({"deleted_ids": deleted_ids})
 
 
 class SaveStyleRequest(BaseModel):
@@ -332,11 +365,19 @@ class SaveStyleRequest(BaseModel):
 async def save_style_from_extraction(task_id: str, req: SaveStyleRequest):
     """Save completed extraction result as a custom PPT style."""
     logger.info("[API] POST /api/style-extraction/%s/save user_id=%s", task_id, req.user_id)
+    style_count = await db.count_custom_styles(req.user_id)
+    if style_count >= MAX_CUSTOM_STYLES_PER_USER:
+        raise BizException(ERR_CUSTOM_STYLE_QUOTA, f"每个用户最多保存 {MAX_CUSTOM_STYLES_PER_USER} 个自定义风格，当前已有 {style_count} 个。")
     try:
         style = await style_extract_manager.save_as_custom_style(task_id, req.user_id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return style
+        msg = str(exc)
+        if "未完成" in msg or "not completed" in msg.lower():
+            raise BizException(ERR_TASK_NOT_COMPLETED, "任务未完成，无法保存") from exc
+        if "已保存" in msg or "重复" in msg:
+            raise BizException(ERR_STYLE_ALREADY_SAVED, "该风格已保存，请勿重复操作") from exc
+        raise BizException(ERR_TASK_NOT_FOUND, msg) from exc
+    return success_response(style)
 
 
 # --- File download ---
@@ -349,40 +390,38 @@ async def list_ppt_styles(user_id: str = Query(default="")):
     user_ids = ["system"]
     if user_id:
         user_ids.append(user_id)
-    return await db.list_all_ppt_styles(user_ids)
+    data = await db.list_all_ppt_styles(user_ids)
+    return success_response(data)
 
 
 @app.get("/api/voices")
 async def list_voices():
     """List available TTS voices from builtin seed data."""
     logger.info("[API] GET /api/voices")
-    return _BUILTIN_VOICES
+    return success_response(_BUILTIN_VOICES)
 
 
 @app.delete("/api/ppt-styles/{style_id}")
 async def delete_ppt_style(style_id: str):
     """Delete a custom PPT style and its preview file."""
     logger.info("[API] DELETE /api/ppt-styles/%s", style_id)
-    # Verify it exists and is not a system style
     style = await db.get_ppt_style(style_id)
     if not style:
-        raise HTTPException(status_code=404, detail="Style not found")
+        raise BizException(ERR_STYLE_NOT_FOUND, "风格不存在")
     if style["user_id"] == "system":
-        raise HTTPException(status_code=403, detail="Cannot delete system styles")
+        raise BizException(ERR_SYSTEM_STYLE_DELETE, "不能删除系统风格")
     # Delete preview file and its directory if it exists
     preview_path = style.get("preview_path", "")
     if preview_path:
         if file_store.is_local_path(preview_path):
-            # Local path (legacy or new): delete the directory containing the preview
             style_dir = Path(preview_path).parent
             await file_store.delete_dir(str(style_dir))
             logger.info("[API] deleted style directory: %s", style_dir)
         else:
-            # OSS: use delete_user_style which handles prefix deletion
             await file_store.delete_user_style(style["user_id"], style_id)
             logger.info("[API] deleted style files for user=%s style=%s", style["user_id"], style_id)
     await db.delete_ppt_style(style_id)
-    return {"ok": True}
+    return success_response(None)
 
 
 # Regex for stripping external font <link> tags (Google Fonts, loli, fontshare, gstatic)

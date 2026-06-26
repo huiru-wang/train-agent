@@ -7,7 +7,7 @@ from langgraph.constants import TAG_NOSTREAM
 
 
 class SummarizationMiddleware(SummarizationMiddleware):
-    """Train Agent summarization with UI-safe markers and a simple cooldown."""
+    """Summarization with UI-safe markers and a simple cooldown."""
 
     def __init__(
         self,
@@ -47,7 +47,7 @@ class SummarizationMiddleware(SummarizationMiddleware):
                 name="summary",
                 additional_kwargs={
                     "lc_source": "summarization",
-                    "train_agent_hidden": True,
+                    "message_hidden": True,
                 },
             )
         ]

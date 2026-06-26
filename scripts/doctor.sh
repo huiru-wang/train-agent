@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# doctor.sh - check local prerequisites for train-agent development.
+# doctor.sh - check local prerequisites for RumiAI development.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

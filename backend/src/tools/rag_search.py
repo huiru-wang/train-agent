@@ -2,7 +2,7 @@ import logging
 
 from langchain.tools import tool, ToolRuntime
 
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
 from src.storage.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def _format_location(result: dict) -> str:
 
 def create_rag_search_tool(vector_store: VectorStore):
     @tool
-    def rag_search(runtime: ToolRuntime[TrainAgentState], query: str, top_k: int = 5, doc_id: str = "", **kwargs) -> str:
+    def rag_search(runtime: ToolRuntime[MainAgentState], query: str, top_k: int = 5, doc_id: str = "", **kwargs) -> str:
         """从当前工作区的知识库中检索相关文档片段。当用户提出与文档内容相关的问题时使用。
 
         当用户明确指定了某篇文档时，使用 doc_id 参数限定检索范围，只在该文档内检索。

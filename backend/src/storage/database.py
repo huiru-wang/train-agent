@@ -219,6 +219,60 @@ class Database:
 
     # --- Workspace ---
 
+    # --- Quota count helpers ---
+
+    async def count_workspaces(self, user_id: str) -> int:
+        """Count workspaces owned by a user."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) as cnt FROM workspace WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+    async def count_documents(self, workspace_id: str) -> int:
+        """Count non-error documents in a workspace."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) as cnt FROM document WHERE workspace_id = ? AND status != 'error'",
+            (workspace_id,),
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+    async def count_tasks_by_type(self, workspace_id: str, task_type: str) -> int:
+        """Count top-level tasks of a specific type in a workspace."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) as cnt FROM task WHERE workspace_id = ? AND type = ? AND parent_task_id IS NULL",
+            (workspace_id, task_type),
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+    async def count_child_tasks(self, parent_task_id: str, task_type: str) -> int:
+        """Count child tasks of a specific type under a parent task."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) as cnt FROM task WHERE parent_task_id = ? AND type = ?",
+            (parent_task_id, task_type),
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+    async def count_custom_styles(self, user_id: str) -> int:
+        """Count custom PPT styles owned by a user (excluding system styles)."""
+        await self.ensure_initialized()
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) as cnt FROM ppt_style WHERE user_id = ? AND user_id != 'system'",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        return row["cnt"] if row else 0
+
+    # --- Workspace ---
+
     async def create_workspace(self, user_id: str, name: str) -> dict:
         normalized_name = name.strip()
         cursor = await self.connection.execute(

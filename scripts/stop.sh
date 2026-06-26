@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# stop.sh — 停止 train-agent 全部服务
+# stop.sh — 停止 RumiAI 全部服务
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

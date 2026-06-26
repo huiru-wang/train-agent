@@ -191,7 +191,7 @@ export function Assistant({ workspaceId, pptStyle, voiceId, currentPptTaskId, on
 
   const stream = useStream({
     apiUrl: LANGGRAPH_API_URL,
-    assistantId: "train_agent",
+    assistantId: "main_agent",
     threadId,
     onThreadId: handleThreadId,
     onUpdateEvent: handleUpdateEvent,
@@ -418,7 +418,7 @@ function isHiddenMessage(message: any): boolean {
   if (message?.name === "summary") return true;
   // 2. additional_kwargs check
   const kwargs = message?.additional_kwargs;
-  if (kwargs?.train_agent_hidden) return true;
+  if (kwargs?.message_hidden) return true;
   if (kwargs?.lc_source === "summarization") return true;
   // 3. content fallback
   const content = typeof message?.content === "string" ? message.content : "";
@@ -428,7 +428,6 @@ function isHiddenMessage(message: any): boolean {
 
 const SUMMARIZATION_UPDATE_KEYS = new Set([
   "SummarizationMiddleware.before_model",
-  "TrainAgentSummarizationMiddleware.before_model",
 ]);
 
 function getSummarizationMessages(data: unknown): any[] | undefined {

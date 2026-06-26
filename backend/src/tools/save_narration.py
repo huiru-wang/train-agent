@@ -6,7 +6,8 @@ import traceback
 
 from langchain.tools import tool, ToolRuntime
 
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
+from src.limits import MAX_NARRATIONS_PER_PPT_TASK
 from src.managers.tts_manager import TTSManager
 from src.storage.database import Database
 from src.storage.seeds import _BUILTIN_VOICES
@@ -98,7 +99,7 @@ async def _tts_pipeline(
 def create_save_narration_tool(db: Database, file_store: FileStore, tts_service: TTSManager):
     @tool
     async def save_narration(
-        runtime: ToolRuntime[TrainAgentState],
+        runtime: ToolRuntime[MainAgentState],
         parent_task_id: str,
         title: str,
         slides: str,
@@ -112,12 +113,12 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
 
         Args:
             parent_task_id: 关联的 PPT 任务 ID
-            title: 口播稿标题，如"新员工消防培训 · 口播稿"
+            title: 口播稿标题
             slides: JSON 字符串，格式为 [{"number":1, "title":"...", "text":"口播稿文本"}, ...]
             language: 语言代码 — 'zh'（中文）或 'en'（英文）
         """
         workspace_id = runtime.state.get("workspace_id", "default")
-        # Voice: always from TrainAgentState, fallback to workspace ext_data
+        # Voice: always from MainAgentState, fallback to workspace ext_data
         voice_id = runtime.state.get("voice_id", "")
         if not voice_id:
             ws = await db.get_workspace(workspace_id)
@@ -143,6 +144,14 @@ def create_save_narration_tool(db: Database, file_store: FileStore, tts_service:
             return f"错误：未找到 PPT 任务 {parent_task_id}。"
         if parent_task.get("type") != "ppt":
             return f"错误：任务 {parent_task_id} 不是 PPT 类型。"
+
+        # Quota check: max narrations per PPT task
+        narration_count = await db.count_child_tasks(parent_task_id, "narration")
+        if narration_count >= MAX_NARRATIONS_PER_PPT_TASK:
+            return (
+                f"错误：每个PPT任务最多生成 {MAX_NARRATIONS_PER_PPT_TASK} 个口播稿，"
+                f"当前已有 {narration_count} 个。请删除旧口播稿后重试。"
+            )
 
         # Parse slides JSON
         try:

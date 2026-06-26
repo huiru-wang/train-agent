@@ -7,10 +7,10 @@ logger = logging.getLogger(__name__)
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 # ============================================================
-# Train-agent System Prompt (loaded from file via PromptManager)
+# RumiAI System Prompt (loaded from file via PromptManager)
 # ============================================================
 
-_FALLBACK_SYSTEM_PROMPT = "你是一名企业培训助手，专注于基于知识库文档为用户提供培训咨询服务。"
+_FALLBACK_SYSTEM_PROMPT = "你是 RumiAI，一个文档驱动的 AI 工作台助手，基于知识库文档为用户提供问答与内容生成服务。"
 
 
 class PromptManager:

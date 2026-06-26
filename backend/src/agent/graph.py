@@ -5,7 +5,7 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 
 from src.agent.message_history import MessageHistoryCallback
-from src.agent.state import TrainAgentState
+from src.agent.state import MainAgentState
 from src.app_context import AppContext
 from src.middlewares import create_middlewares
 from src.tools import create_tools
@@ -32,7 +32,7 @@ def create_graph(ctx: AppContext):
     return create_agent(
         model=model,
         tools=tools,
-        state_schema=TrainAgentState,
+        state_schema=MainAgentState,
         middleware=middlewares,
     )
 

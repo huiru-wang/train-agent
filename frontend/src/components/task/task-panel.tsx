@@ -116,7 +116,7 @@ export function TaskPanel({ workspaceId, styles, voices, onNarrate, onPlayNarrat
           <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
             <Package size={28} strokeWidth={1} />
             <p className="text-xs">
-              使用 /ppt 等命令生成的产出会显示在这里
+              产出的文件会显示在这里
             </p>
           </div>
         ) : (
@@ -391,7 +391,7 @@ function TaskItem({ task, workspaceId, styles, voices, onDeleted, onNarrate, onP
             <MoreHorizontal size={12} />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-lg border border-border bg-[#1e1e2e] py-1 shadow-xl">
+            <div className="absolute right-0 top-full z-50 mt-1 w-36 rounded-lg border border-border bg-muted py-1 shadow-xl">
               {hasDownload && (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDownload(); }}

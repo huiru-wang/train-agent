@@ -8,7 +8,6 @@ import remarkGfm from "remark-gfm";
 import {
   SendHorizontal,
   Square,
-  Bot,
   Brain,
   ChevronDown,
   Copy,
@@ -85,7 +84,7 @@ function tryParseJSONObject(rawText: string): Record<string, any> | null {
 function isHiddenMessage(message: any): boolean {
   if (message?.name === "summary") return true;
   const kwargs = message?.additional_kwargs;
-  if (kwargs?.train_agent_hidden) return true;
+  if (kwargs?.message_hidden) return true;
   if (kwargs?.lc_source === "summarization") return true;
   const content = typeof message?.content === "string" ? message.content : "";
   return content.startsWith("Here is a summary of the conversation to date:");
@@ -496,7 +495,7 @@ const AITurnBubble = memo(function AITurnBubble({ turn }: { turn: AITurn }) {
           }
           if (item.kind === "text") {
             return (
-              <div key={item.key} className="prose prose-invert prose-sm max-w-none">
+              <div key={item.key} className="prose prose-sm max-w-none">
                 <MarkdownWithCitations text={item.text} />
               </div>
             );
@@ -1027,29 +1026,38 @@ function normalizeFieldOptions(options: unknown): string[] | undefined {
 }
 
 function InterruptBlock() {
-  const { interrupt } = useStreamContext();
+  const { interrupt, isLoading } = useStreamContext();
   const onResume = useResume();
   // 本地已提交标记：resume 发出后立即隐藏表单，不等 stream 消息更新。
   // 防止重启后重复点击提交触发 "no pending protocol interrupt" 错误。
   const [localSubmitted, setLocalSubmitted] = useState(false);
 
-  // Reset localSubmitted when a genuinely NEW interrupt arrives (e.g. user
-  // cancelled a previous form and the agent issues a new one).  Use deep value
-  // comparison (stableStringify) instead of reference comparison to avoid false
-  // resets when the stream returns the same interrupt value with a new object
-  // reference during resume processing.
-  const prevInterruptRef = useRef<typeof interrupt>(undefined);
+  // 记录已处理（提交/取消）的 interrupt 值的序列化字符串。
+  // 用于防止 SDK 在 stream 结束后从 stale threadHead.tasks[].interrupts
+  // 重新暴露相同 interrupt 值导致表单重复出现（取消后 BUG）。
+  const handledValueRef = useRef<string | null>(null);
+
   useEffect(() => {
-    const prev = prevInterruptRef.current;
-    if (interrupt !== prev && interrupt?.value !== undefined) {
-      const prevValue = (prev as { value?: unknown } | undefined)?.value;
-      const currValue = interrupt.value;
-      if (prevValue === undefined || stableStringify(prevValue) !== stableStringify(currValue)) {
-        setLocalSubmitted(false);
-      }
+    // 当 interrupt 完全消失且 stream 空闲时，清除已处理记录，
+    // 为下一次全新 interrupt 做准备。
+    if ((!interrupt || interrupt.value === undefined) && !isLoading) {
+      handledValueRef.current = null;
+      return;
     }
-    prevInterruptRef.current = interrupt;
-  }, [interrupt]);
+
+    if (!interrupt || interrupt.value === undefined) return;
+
+    const currStringified = stableStringify(interrupt.value);
+
+    // 如果当前 interrupt 值与已处理的值相同，说明是 SDK 从 stale state
+    // 重新暴露的旧值，跳过重置，保持表单隐藏。
+    if (handledValueRef.current === currStringified) {
+      return;
+    }
+
+    // 真正的新 interrupt 到达，重置提交状态以显示表单。
+    setLocalSubmitted(false);
+  }, [interrupt, isLoading]);
 
   if (!interrupt || interrupt.value === undefined) return null;
   if (localSubmitted) return null;
@@ -1058,11 +1066,13 @@ function InterruptBlock() {
 
   const handleSubmit = async (values: Record<string, string | string[]>) => {
     setLocalSubmitted(true);
+    handledValueRef.current = stableStringify(interrupt.value);
     try {
       await onResume(values);
     } catch (err) {
       console.error("[InterruptBlock] resume failed:", err);
       setLocalSubmitted(false);
+      handledValueRef.current = null;
     }
   };
 
@@ -1164,17 +1174,19 @@ function TypingIndicator() {
 function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-3 py-20 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/15 text-accent">
-        <Bot size={24} />
+      <div className="flex h-12 w-12 items-center justify-center text-accent">
+        <svg viewBox="0 0 120 120" className="h-6 w-6" aria-hidden="true">
+          <path d="M60,22 C82,22 100,40 100,62 C100,84 82,102 60,102 C45,102 32,94 25,82" stroke="currentColor" strokeWidth="4" fill="none" strokeLinecap="round"/>
+          <path d="M60,42 C71,42 80,51 80,62 C80,73 71,82 60,82 C52,82 46,78 43,72" stroke="#C75B3A" strokeWidth="3" fill="none" strokeLinecap="round"/>
+          <circle cx="60" cy="62" r="4" fill="currentColor"/>
+        </svg>
       </div>
-      <h3 className="text-base font-medium text-foreground">培训助手</h3>
-      <p className="max-w-sm text-sm text-muted-foreground">
-        上传培训文档后，我可以帮你理解内容、回答问题，还能用
-        <code className="mx-1 rounded bg-muted px-1.5 py-0.5 text-xs text-accent">
-          /ppt
-        </code>
-        生成培训PPT
-      </p>
+      <div className="max-w-sm space-y-2">
+        <p className="text-sm text-foreground">
+          我是 <span className="font-medium">Rumi</span> —— 文档知识的 AI 工作台助手，帮你把文档变成知识、演示和声音。
+        </p>
+        <p className="text-sm text-muted-foreground">有什么我可以帮你的吗？</p>
+      </div>
     </div>
   );
 }
@@ -1194,7 +1206,7 @@ interface SlashCommand {
 const SLASH_COMMANDS: SlashCommand[] = [
   {
     command: "/ppt",
-    label: "生成培训PPT",
+    label: "生成PPT",
     description: "基于知识库文档生成 HTML 演示文稿",
     icon: <FileOutput size={14} />,
     placeholder: "还可以输入PPT主题、页数、内容要求...",
@@ -1226,7 +1238,7 @@ function SlashCommandMenu({
   if (filtered.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-border bg-[#1e1e2e] shadow-xl overflow-hidden z-50">
+    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-border bg-muted shadow-xl overflow-hidden z-50">
       <div className="px-3 py-1.5 text-[11px] text-muted-foreground/60 uppercase tracking-wider border-b border-border/50">
         可用命令
       </div>
@@ -1597,7 +1609,7 @@ function CitationBadge({
       </span>
       {show && (
         <span
-          className="fixed z-[9999] w-max max-w-xs -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-[#1e1e2e] px-3 py-2 text-xs text-foreground shadow-xl"
+          className="fixed z-[9999] w-max max-w-xs -translate-x-1/2 -translate-y-full rounded-lg border border-border bg-muted px-3 py-2 text-xs text-foreground shadow-xl"
           style={{ top: pos.top, left: pos.left }}
         >
           <span className="font-medium text-emerald-400">📄 {docName}</span>

@@ -1,4 +1,4 @@
-const USER_ID_KEY = "train-agent-user-id";
+const USER_ID_KEY = "rumi-ai-user-id";
 
 export function getUserId(): string {
   if (typeof window === "undefined") return "anonymous";

@@ -1,14 +1,22 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
-export class ApiError extends Error {
-  status: number;
-  detail: string;
+/**
+ * Unified API response envelope.
+ * All business endpoints return HTTP 200 with this structure.
+ */
+interface ApiResponse<T = unknown> {
+  data: T;
+  code: number;
+  message: string;
+}
 
-  constructor(status: number, statusText: string, detail: string) {
-    super(detail || `API error: ${status} ${statusText}`);
+export class ApiError extends Error {
+  code: number;
+
+  constructor(code: number, message: string) {
+    super(message || `API error: code ${code}`);
     this.name = "ApiError";
-    this.status = status;
-    this.detail = detail;
+    this.code = code;
   }
 }
 
@@ -22,23 +30,13 @@ async function request<T>(
     headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
   });
-  if (!response.ok) {
-    console.error(`[API] ${method} ${path} failed: ${response.status} ${response.statusText}`);
-    let detail = "";
-    try {
-      const errorData = await response.json();
-      detail =
-        typeof errorData.detail === "string"
-          ? errorData.detail
-          : JSON.stringify(errorData.detail ?? errorData);
-    } catch {
-      detail = response.statusText;
-    }
-    throw new ApiError(response.status, response.statusText, detail);
+  const body: ApiResponse<T> = await response.json();
+  if (body.code !== 0) {
+    console.error(`[API] ${method} ${path} biz error: code=${body.code} message=${body.message}`);
+    throw new ApiError(body.code, body.message);
   }
-  const data = await response.json();
-  console.log(`[API] ${method} ${path} →`, Array.isArray(data) ? `${data.length} items` : data);
-  return data as T;
+  console.log(`[API] ${method} ${path} →`, Array.isArray(body.data) ? `${body.data.length} items` : body.data);
+  return body.data;
 }
 
 // --- Workspace ---
@@ -179,20 +177,12 @@ export async function uploadDocument(
     `${API_BASE}/api/workspaces/${workspaceId}/documents`,
     { method: "POST", body: formData }
   );
-  if (!response.ok) {
-    if (response.status === 409) {
-      const body = await response.json().catch(() => ({}));
-      const message =
-        (body.detail as { message?: string })?.message ??
-        "文档已存在，请勿重复上传";
-      throw new Error(message);
-    }
-    console.error(`[API] upload failed: ${response.status} ${response.statusText}`);
-    throw new Error(`Upload failed: ${response.statusText}`);
+  const body: ApiResponse<Document> = await response.json();
+  if (body.code !== 0) {
+    throw new ApiError(body.code, body.message);
   }
-  const data = await response.json();
-  console.log(`[API] upload result: id=${data.id} status=${data.status}`);
-  return data;
+  console.log(`[API] upload result: id=${body.data.id} status=${body.data.status}`);
+  return body.data;
 }
 
 export function deleteDocument(
@@ -286,11 +276,11 @@ export function submitStyleExtraction(
     `${API_BASE}/api/workspaces/${workspaceId}/style-extraction`,
     { method: "POST", body: formData }
   ).then(async (res) => {
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new ApiError(res.status, res.statusText, err.detail || res.statusText);
+    const body: ApiResponse<Task> = await res.json();
+    if (body.code !== 0) {
+      throw new ApiError(body.code, body.message);
     }
-    return res.json();
+    return body.data;
   });
 }
 

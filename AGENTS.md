@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-Train Agent 是一个 **AI 培训助手**，帮助用户基于上传的培训文档进行知识问答、PPT 生成、口播稿生成、TTS 音频合成和 PPT 风格提取。
+RumiAI 是一个 **文档驱动的 AI 工作台**，帮助用户基于上传的文档进行知识问答、PPT 生成、口播稿生成、TTS 音频合成和 PPT 风格提取。
 
 ### 核心准则
 
@@ -119,7 +119,7 @@ pnpm build && pnpm start                                    # 生产构建
 - Keep TTS audio generation in `backend/src/managers/tts_manager.py` (TTSManager).
 - Keep style extraction workflow in `backend/src/managers/style_extract_manager.py` (StyleExtractManager). Status flow: `generating(parsing → analyzing_style → generating_preview) → completed | failed`.
 - Register agent tools in `backend/src/tools/__init__.py` via `create_tools(ctx)`. Current tools (8): `clarify_form`, `rag_search`, `load_skill`, `save_ppt`, `run_skill_script`, `get_ppt_detail`, `get_style_template`, `save_narration`.
-- New tools go in `backend/src/tools/`. Use `ToolRuntime[TrainAgentState]` for workspace-aware tools.
+- New tools go in `backend/src/tools/`. Use `ToolRuntime[MainAgentState]` for workspace-aware tools.
 - Register middlewares in `backend/src/middlewares/__init__.py` via `create_middlewares(ctx, callback)`. Middleware classes: `ContextInjectMiddleware`, `MessageHistoryMiddleware`, `ModelMessageSanitizerMiddleware`, `SummarizationMiddleware`, `LoggingMiddleware`.
 - System prompt is loaded from `backend/src/managers/prompts/system_prompt.md` via `PromptManager`. Dynamic context (doc summaries, PPT metadata, style description) is injected via `ContextInjectMiddleware`.
 - Style extraction prompts are in `backend/src/managers/prompts/` (style_extract_prompt.md, generate_cover_html_prompt.md).

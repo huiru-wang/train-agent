@@ -35,7 +35,7 @@ export function CreateDialog({ open, onClose, onCreate }: CreateDialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-[#1e1e1e] p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-2xl">
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">
             新建工作区
@@ -55,7 +55,7 @@ export function CreateDialog({ open, onClose, onCreate }: CreateDialogProps) {
               setName(event.target.value);
               setError("");
             }}
-            placeholder="例如：新员工入职培训"
+            placeholder="例如：Q3 产品规划"
             className="w-full rounded-lg border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
           {error && (

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# start.sh — 启动 train-agent 全部服务（后端API + LangGraph + 前端）
+# start.sh — 启动 RumiAI 全部服务（后端API + LangGraph + 前端）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
