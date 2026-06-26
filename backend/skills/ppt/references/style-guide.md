@@ -53,3 +53,17 @@ CSS does not allow a leading `-` before function names. The browser silently dis
 **Layouts:** Everything centered, generic hero sections, identical card grids
 
 **Decorations:** Realistic illustrations, gratuitous glassmorphism, drop shadows without purpose
+---
+
+## Chart Color Integration
+
+Charts must feel native to the current theme. Follow these rules for every SVG chart:
+
+- **Never hard-code chart colors**. Always derive them from the theme CSS variables defined in `:root`.
+- Use these mappings:
+  - Primary data marks: `var(--accent)`
+  - Secondary / muted data: `var(--text-secondary)` or a transparent variant such as `rgba(var(--accent-rgb), 0.5)`
+  - Chart background fills: `var(--bg-secondary)` with low opacity
+  - Labels and axis text: `var(--text-primary)` for values, `var(--text-secondary)` for category labels
+- If a chart needs more than one color, generate harmonious variants by adjusting opacity or mixing the accent color with `--bg-secondary`, not by introducing new hues.
+- Avoid library defaults: no gray grids, no blue bars, no default tooltip chrome.

@@ -57,6 +57,7 @@ These invariants apply to EVERY slide in EVERY presentation:
 | Content slide | 1 heading + 4-6 bullet points OR 1 heading + 2 paragraphs |
 | Feature grid  | 1 heading + 6 cards maximum (2x3 or 3x2)                  |
 | Code slide    | 1 heading + 8-10 lines of code                            |
+| Chart slide   | 1 heading + 1 chart (max 60% height) + 1-2 insights       |
 | Quote slide   | 1 quote (max 3 lines) + attribution                       |
 
 **Content exceeds limits? Split into multiple slides. Never cram, never scroll.**
@@ -190,6 +191,37 @@ Output the outline as Markdown in this structure:
 
 Keep the outline concise but concrete enough for the user to judge scope, order, and emphasis. Do not call tools in the same assistant message as the outline unless retrieval is needed before writing it.
 
+### Step 2.15: Automatic Chart Decision
+
+When drafting the outline, inspect the source content for each slide and decide whether a chart would clarify the data relationship better than text. Do NOT ask the user whether they want charts; this is an agent design decision.
+
+**Add a chart in the "视觉建议" column when the slide content matches any of these patterns:**
+
+| Content Pattern | Recommended Chart |
+|-----------------|-------------------|
+| Multiple values compared or ranked | Bar / Lollipop / Radial Bar |
+| Values changing over time or sequence | Line / Area |
+| Parts of a whole, percentages, share | Donut / Treemap / Waffle |
+| Flow from one stage to another | Sankey / Flow Diagram |
+| Multi-dimensional scores or ratings | Radar |
+| A few KPIs with a short trend | Sparkline + Big Number |
+
+**Do NOT use a chart when:**
+
+- Only 1-2 isolated numbers exist (use a large numeral instead)
+- The comparison is purely conceptual with no figures (use cards or a diagram)
+- There are more than 12 categories (aggregate or use a table)
+- The data has more than 3-4 dimensions (split into multiple slides)
+- The source text contains no concrete figures
+
+**Writing rule for the outline:** When you choose a chart, write the exact chart type in the "视觉建议" column, for example:
+
+- "Lollipop chart showing Q3 revenue by team"
+- "Area chart with gradient fill for user growth trend"
+- "Donut chart + center counter for market share breakdown"
+
+Never write vague suggestions like "配图" or "可视化".
+
 ### Step 2.2: Multi-turn Revision Loop
 
 After presenting the outline, wait for the user's reply.
@@ -223,6 +255,9 @@ The final presentation must follow the confirmed outline. You may split an overl
 - [style-guide.md](references/style-guide.md) — CSS rules, anti-patterns, font reference
 - [viewport-base.css](assets/viewport-base.css) — Mandatory CSS (include in full)
 - [animation-patterns.md](references/animation-patterns.md) — Animation reference for the selected style and presentation tone
+- [chart-guide.md](references/chart-guide.md) — When the outline contains chart slides: chart selection, design rules, anti-patterns
+- [chart-patterns.css](assets/chart-patterns.css) — When the outline contains chart slides: reusable SVG chart CSS classes and keyframes
+- [chart-templates.md](references/chart-templates.md) — When the outline contains chart slides: copy-ready SVG chart skeletons
 
 **Key requirements:**
 
@@ -316,3 +351,6 @@ Summarize — Tell the user:
 | [viewport-base.css](assets/viewport-base.css)             | Mandatory responsive CSS — copy into every presentation              | Phase 3      |
 | [html-template.md](references/html-template.md)               | HTML structure, JS features, code quality standards                  | Phase 3      |
 | [animation-patterns.md](references/animation-patterns.md)     | CSS/JS animation snippets and effect-to-feeling guide                | Phase 3      |
+| [chart-guide.md](references/chart-guide.md)                 | Chart selection, design rules, anti-patterns                         | Phase 3 (when outline has charts) |
+| [chart-patterns.css](assets/chart-patterns.css)           | Reusable SVG chart CSS classes and keyframes                         | Phase 3 (when outline has charts) |
+| [chart-templates.md](references/chart-templates.md)         | Copy-ready SVG chart skeletons                                       | Phase 3 (when outline has charts) |

@@ -457,6 +457,97 @@ setupAutoSave() {
 }
 ```
 
+
+## Chart Slide Example
+
+A chart slide combines an SVG visualization with a title and one or two insights. Keep the chart height under 60% of the slide.
+
+```html
+<section class="slide chart-slide">
+  <div class="slide-content">
+    <h2 class="reveal">Q3 Revenue by Team</h2>
+
+    <svg class="chart-wrap reveal" viewBox="0 0 600 300" preserveAspectRatio="xMidYMid meet">
+      <!-- Horizontal lollipop chart -->
+      <g transform="translate(120, 40)">
+        <!-- Baseline -->
+        <line class="chart-axis" x1="0" y1="0" x2="400" y2="0" />
+        <line class="chart-axis" x1="0" y1="60" x2="400" y2="60" />
+        <line class="chart-axis" x1="0" y1="120" x2="400" y2="120" />
+        <line class="chart-axis" x1="0" y1="180" x2="400" y2="180" />
+
+        <!-- Category A -->
+        <text class="chart-label" x="-10" y="5" text-anchor="end">Alpha</text>
+        <line class="chart-lollipop-line" x1="0" y1="0" x2="280" y2="0" />
+        <circle class="chart-lollipop-head" cx="280" cy="0" r="6" />
+        <text class="chart-value" x="290" y="5">72%</text>
+
+        <!-- Category B -->
+        <text class="chart-label" x="-10" y="65" text-anchor="end">Beta</text>
+        <line class="chart-lollipop-line" x1="0" y1="60" x2="190" y2="60" />
+        <circle class="chart-lollipop-head" cx="190" cy="60" r="6" />
+        <text class="chart-value" x="200" y="65">48%</text>
+
+        <!-- Category C -->
+        <text class="chart-label" x="-10" y="125" text-anchor="end">Gamma</text>
+        <line class="chart-lollipop-line" x1="0" y1="120" x2="340" y2="120" />
+        <circle class="chart-lollipop-head" cx="340" cy="120" r="6" />
+        <text class="chart-value" x="350" y="125">85%</text>
+      </g>
+    </svg>
+
+    <p class="reveal insight">Gamma leads Q3 revenue at 85%, while Beta remains below the 50% threshold.</p>
+  </div>
+</section>
+```
+
+### Chart Animation Trigger
+
+The example above relies on classes from `chart-patterns.css`. Animations are triggered when the parent `.slide` receives the `.visible` class from the existing `IntersectionObserver`:
+
+```css
+.chart-lollipop-line {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide.visible .chart-lollipop-line {
+  transform: scaleX(1);
+}
+```
+
+For line charts, use `stroke-dashoffset`:
+
+```css
+.chart-line {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide.visible .chart-line {
+  stroke-dashoffset: 0;
+}
+```
+
+### Counter Animation
+
+For big numbers inside donut centers or KPI slides, animate the number with a small JS helper:
+
+```javascript
+function animateCounter(el, target, duration = 1200) {
+  const start = performance.now();
+  const step = (now) => {
+    const progress = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(target * progress);
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Trigger inside SlidePresentation observer when slide becomes visible
+```
+
+
 ## Code Quality
 
 **Comments:** Every section needs clear comments explaining what it does and how to modify it.
